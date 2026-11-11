@@ -7,7 +7,7 @@ import { fmtExpires, fmtPercent, fmtSpeed, fmtUptime } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-export function ServerTable({ servers }: { servers: ServerView[] }) {
+export function ServerTable({ servers, onOpen }: { servers: ServerView[]; onOpen?: (id: string) => void }) {
   return (
     <div className="rounded-lg border">
       <Table>
@@ -28,7 +28,7 @@ export function ServerTable({ servers }: { servers: ServerView[] }) {
             const m = s.metrics
             const memPct = m && m.mem_total > 0 ? (m.mem_used / m.mem_total) * 100 : 0
             return (
-              <TableRow key={s.id} className={cn(!s.online && 'opacity-60')}>
+              <TableRow key={s.id} className={cn('cursor-pointer', !s.online && 'opacity-60')} onClick={() => onOpen?.(s.id)}>
                 <TableCell>
                   <span
                     className={cn(

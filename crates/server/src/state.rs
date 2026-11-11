@@ -60,6 +60,8 @@ pub struct AppState {
     /// 最近一次指标（含离线机器最后的快照，重启丢失——低价值数据可接受）
     pub metrics: DashMap<String, RealtimeMetrics>,
     pub system_info: DashMap<String, SystemInfo>,
+    /// 最近 ~70s 的 CPU 样本（1min 聚合用）
+    pub cpu_history: DashMap<String, std::collections::VecDeque<(std::time::Instant, f32)>>,
     /// 注册表缓存（add-server / 删除时 invalidate + reload）
     pub registry: dashmap::DashMap<String, [u8; 32]>,
     pub dash_tx: broadcast::Sender<DashboardEvent>,
@@ -75,12 +77,41 @@ impl AppState {
             live: DashMap::new(),
             metrics: DashMap::new(),
             system_info: DashMap::new(),
+            cpu_history: DashMap::new(),
             registry: DashMap::new(),
             dash_tx,
             metrics_interval_secs,
         };
         state.reload_registry()?;
         Ok(state)
+    }
+
+    /// 记录一次 CPU 样本（保留 70s 窗口）。
+    pub fn push_cpu(&self, id: &str, usage: f32) {
+        let mut q = self.cpu_history.entry(id.to_string()).or_default();
+        let cutoff = std::time::Instant::now() - std::time::Duration::from_secs(70);
+        while q.front().is_some_and(|(t, _)| *t < cutoff) {
+            q.pop_front();
+        }
+        q.push_back((std::time::Instant::now(), usage));
+    }
+
+    /// 当前窗口 CPU 统计 (min, avg, max)；无样本返回 0。
+    pub fn cpu_stats(&self, id: &str) -> (f32, f32, f32) {
+        match self.cpu_history.get(id) {
+            Some(q) if !q.is_empty() => {
+                let mut min = f32::MAX;
+                let mut max = f32::MIN;
+                let mut sum = 0.0;
+                for (_, v) in q.iter() {
+                    min = min.min(*v);
+                    max = max.max(*v);
+                    sum += v;
+                }
+                (min, sum / q.len() as f32, max)
+            }
+            _ => (0.0, 0.0, 0.0),
+        }
     }
 
     /// 从 DB 加载 agent_id → pubkey 注册表（启动时 + 变更时）。
@@ -115,27 +146,27 @@ impl AppState {
         self.store
             .with(|c| {
                 let mut stmt = c.prepare(
-                    "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes FROM servers ORDER BY created_at",
+                    "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0) FROM servers ORDER BY created_at",
                 )?;
                 let rows = stmt
                     .query_map([], |r| {
-                        Ok(ServerReg {
+                        Ok((ServerReg {
                             id: r.get(0)?,
                             name: r.get(1)?,
                             group_id: r.get(2)?,
                             expires_at: r.get(3)?,
                             public_visible: r.get::<_, i64>(4)? != 0,
                             traffic_quota_bytes: r.get(5)?,
-                        })
+                        }, r.get::<_, i64>(6)?))
                     })?
                     .collect::<std::result::Result<Vec<_>, _>>()?;
                 Ok(rows)
             })
             .unwrap_or_default()
             .into_iter()
-            .map(|reg| {
+            .map(|(reg, db_last_seen)| {
                 let online = self.live.contains_key(&reg.id);
-                let last_seen = if online { unix_now() } else { 0 }; // DB last_seen 在 M3 接入
+                let last_seen = if online { unix_now() } else { db_last_seen };
                 ServerView {
                     id: reg.id.clone(),
                     name: reg.name,

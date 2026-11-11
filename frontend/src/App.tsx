@@ -1,16 +1,30 @@
-// 仪表盘主页（JIKASEI 风格：概览卡片 → 分组标签 → 服务器列表，三种形态）
-import { useMemo, useState } from 'react'
+// 路由：#/ 仪表盘，#/server/{id} 详情（hash 路由，零依赖）
+import { useEffect, useMemo, useState } from 'react'
 import { GroupTabs, StatCards, ViewModeToggle, type ViewMode } from '@/components/dashboard-header'
 import { ServerCard, ServerCardMini } from '@/components/server-card'
 import { ServerTable } from '@/components/server-table'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { ServerDetail } from '@/pages/server-detail'
 import { useServers } from '@/hooks/useServers'
 import { cn } from '@/lib/utils'
 
 const VIEW_KEY = 'zt-view-mode'
 
+function useHashRoute(): [string, (h: string) => void] {
+  const [hash, setHash] = useState(() => location.hash || '#/')
+  useEffect(() => {
+    const on = () => setHash(location.hash || '#/')
+    addEventListener('hashchange', on)
+    return () => removeEventListener('hashchange', on)
+  }, [])
+  return [hash, (h) => {
+    location.hash = h
+  }]
+}
+
 export default function App() {
   const { servers, status } = useServers()
+  const [hash, navigate] = useHashRoute()
   const [view, setView] = useState<ViewMode>(
     () => (localStorage.getItem(VIEW_KEY) as ViewMode) || 'detailed',
   )
@@ -22,6 +36,23 @@ export default function App() {
   }
 
   const list = useMemo(() => [...servers.values()], [servers])
+
+  // 详情页
+  const detailId = hash.startsWith('#/server/') ? hash.slice('#/server/'.length) : null
+  const detailServer = detailId ? servers.get(detailId) : null
+  if (detailId) {
+    return (
+      <div className="min-h-svh bg-background text-foreground">
+        <main className="mx-auto max-w-6xl px-4 py-6">
+          {detailServer ? (
+            <ServerDetail server={detailServer} onBack={() => navigate('#/')} />
+          ) : (
+            <div className="py-20 text-center text-muted-foreground">加载中…</div>
+          )}
+        </main>
+      </div>
+    )
+  }
 
   // 分组（组名暂用 id 显示，M4 管理页接入命名）
   const groups = useMemo(() => {
@@ -66,14 +97,22 @@ export default function App() {
             {list.length === 0 ? '还没有服务器，用 zhengtang-server add-server 添加一台' : '该分组暂无服务器'}
           </div>
         ) : view === 'compact' ? (
-          <ServerTable servers={sorted} />
+          <ServerTable servers={sorted} onOpen={(id) => navigate(`#/server/${id}`)} />
         ) : view === 'mini' ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {sorted.map((s) => <ServerCardMini key={s.id} server={s} />)}
+            {sorted.map((s) => (
+              <button key={s.id} className="text-left" onClick={() => navigate(`#/server/${s.id}`)}>
+                <ServerCardMini server={s} />
+              </button>
+            ))}
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {sorted.map((s) => <ServerCard key={s.id} server={s} />)}
+            {sorted.map((s) => (
+              <button key={s.id} className="text-left" onClick={() => navigate(`#/server/${s.id}`)}>
+                <ServerCard server={s} />
+              </button>
+            ))}
           </div>
         )}
       </main>

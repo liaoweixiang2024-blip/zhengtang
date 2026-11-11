@@ -5,6 +5,7 @@
 mod api;
 mod embed;
 mod gateway;
+mod jobs;
 mod state;
 mod store;
 mod tls;
@@ -123,6 +124,7 @@ async fn serve(data_dir: &PathBuf, listen: &str, http: bool, metrics_interval: u
     let db_path = data_dir.join("zhengtang.db");
     let store = Arc::new(store::Store::open(&db_path)?);
     let state = Arc::new(AppState::new(store, metrics_interval)?);
+    jobs::spawn(state.clone());
 
     let app = api::router()
         .route("/ws/agent", axum::routing::get(gateway::ws_agent_handler))

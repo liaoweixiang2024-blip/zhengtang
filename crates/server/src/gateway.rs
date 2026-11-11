@@ -116,6 +116,7 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
                     }
                 }
                 if needs_broadcast {
+                    state.push_cpu(&agent_id, m.cpu_usage);
                     state.metrics.insert(agent_id.clone(), m);
                     if let Some(view) = state.server_view(&agent_id) {
                         let _ = state.dash_tx.send(DashboardEvent::Update { server: view });
