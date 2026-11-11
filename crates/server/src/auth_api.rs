@@ -36,6 +36,11 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/admin/users/{id}", delete(delete_user))
         .route("/api/admin/audit", get(list_audit))
         .route("/api/admin/fingerprint", get(get_fingerprint))
+        // 告警
+        .route("/api/alerts/events", get(alert_events))
+        .route("/api/admin/channels", get(list_channels).post(add_channel))
+        .route("/api/admin/channels/{id}", delete(delete_channel))
+        .route("/api/admin/channels/{id}/test", post(test_channel))
 }
 
 fn err(status: StatusCode, msg: &str) -> axum::response::Response {
@@ -582,4 +587,142 @@ async fn get_fingerprint(State(state): State<Arc<AppState>>, jar: CookieJar) -> 
     let _ = state;
     let fp = crate::tls::FINGERPRINT.get().map(|f| f.to_string()).unwrap_or_default();
     Json(json!({ "fingerprint": fp })).into_response()
+}
+
+// ---------- 告警 ----------
+
+/// 最近告警事件（登录可见；viewer 只看其组）。
+async fn alert_events(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+) -> impl IntoResponse {
+    let Some(user) = auth::current_user(&state, &jar) else {
+        return err(StatusCode::UNAUTHORIZED, "未登录");
+    };
+    let events = state
+        .store
+        .with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT e.id, e.server_id, s.name, s.group_id, e.fired_at, e.resolved_at, e.summary
+                 FROM alert_events e JOIN servers s ON s.id = e.server_id
+                 ORDER BY e.id DESC LIMIT 200",
+            )?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, Option<i64>>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, Option<i64>>(5)?,
+                        r.get::<_, String>(6)?,
+                    ))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .unwrap_or_default();
+    let events: Vec<_> = events
+        .into_iter()
+        .filter(|(_, _, _, gid, ..)| crate::api::server_visible_to(&user, *gid))
+        .map(|(id, sid, name, _, fired, resolved, summary)| {
+            json!({ "id": id, "server": name, "server_id": sid, "fired_at": fired, "resolved_at": resolved, "summary": summary })
+        })
+        .collect();
+    Json(json!({ "events": events })).into_response()
+}
+
+async fn list_channels(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let channels = state
+        .store
+        .with(|c| {
+            let mut stmt = c.prepare("SELECT id, type, name FROM notify_channels ORDER BY id")?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok(json!({ "id": r.get::<_, i64>(0)?, "type": r.get::<_, String>(1)?, "name": r.get::<_, String>(2)? }))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .unwrap_or_default();
+    Json(json!({ "channels": channels })).into_response()
+}
+
+#[derive(Deserialize)]
+struct AddChannelBody {
+    #[serde(rename = "type")]
+    type_: String,
+    name: String,
+    config: serde_json::Value,
+}
+
+async fn add_channel(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    jar: CookieJar,
+    Json(body): Json<AddChannelBody>,
+) -> impl IntoResponse {
+    let Ok(admin) = require_admin(&state, &jar) else {
+        return err(StatusCode::FORBIDDEN, "需要管理员权限");
+    };
+    let _ = state.store.with(|c| {
+        c.execute(
+            "INSERT INTO notify_channels (type, name, config) VALUES (?1,?2,?3)",
+            rusqlite::params![body.type_, body.name, body.config.to_string()],
+        )?;
+        Ok(())
+    });
+    auth::audit_state(&state, Some(&admin), "add_channel", &body.name, &auth::client_ip(&headers, Some(peer)));
+    Json(json!({ "ok": true })).into_response()
+}
+
+async fn delete_channel(State(state): State<Arc<AppState>>, jar: CookieJar, Path(id): Path<i64>) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let _ = state.store.with(|c| {
+        c.execute("DELETE FROM notify_channels WHERE id = ?1", [id])?;
+        Ok(())
+    });
+    Json(json!({ "ok": true })).into_response()
+}
+
+/// 测试发送（不落通知历史之外的逻辑）。
+async fn test_channel(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let ch = state
+        .store
+        .with(|c| {
+            let row = c
+                .query_row(
+                    "SELECT id, type, config FROM notify_channels WHERE id = ?1",
+                    [id],
+                    |r| {
+                        Ok(crate::alert_test_helper(id, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+                    },
+                )
+                .ok();
+            Ok(row)
+        })
+        .unwrap_or(None);
+    let Some(ch) = ch else {
+        return err(StatusCode::NOT_FOUND, "渠道不存在");
+    };
+    let ok = crate::alert::send_one(&ch, "zhengtang 测试通知：渠道配置正常", "zhengtang 测试").await;
+    if ok {
+        Json(json!({ "ok": true })).into_response()
+    } else {
+        err(StatusCode::BAD_GATEWAY, "发送失败，查看服务端日志")
+    }
 }

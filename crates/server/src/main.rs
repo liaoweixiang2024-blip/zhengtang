@@ -2,6 +2,7 @@
 //!
 //! 默认在 :8800 起 HTTPS/WSS（自签证书 + 指纹固定）；`--http` 用于反代场景。
 
+mod alert;
 mod api;
 mod auth;
 mod auth_api;
@@ -21,6 +22,11 @@ use clap::{Parser, Subcommand};
 use rand::RngCore;
 
 use crate::state::AppState;
+
+/// auth_api ↔ alert 模块的桥接（避免循环依赖细节外泄）。
+pub fn alert_test_helper(id: i64, t: String, cfg: String) -> crate::alert::Channel {
+    crate::alert::channel_from_row(id, t, cfg)
+}
 
 #[derive(Parser)]
 #[command(name = "zhengtang-server", version, about = "zhengtang 探针服务端")]
@@ -127,6 +133,7 @@ async fn serve(data_dir: &PathBuf, listen: &str, http: bool, metrics_interval: u
     let store = Arc::new(store::Store::open(&db_path)?);
     let state = Arc::new(AppState::new(store, metrics_interval)?);
     jobs::spawn(state.clone());
+    alert::spawn(state.clone());
 
     let app = api::router()
         .merge(auth_api::router())

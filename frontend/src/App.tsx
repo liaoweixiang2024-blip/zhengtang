@@ -6,10 +6,11 @@ import { ServerTable } from '@/components/server-table'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Login } from '@/pages/login'
 import { Admin } from '@/pages/admin'
+import { Alerts } from '@/pages/alerts'
 import { ServerDetail } from '@/pages/server-detail'
 import { useServers } from '@/hooks/useServers'
 import { cn } from '@/lib/utils'
-import { LogOut, Settings } from 'lucide-react'
+import { Bell, LogOut, Settings } from 'lucide-react'
 
 const VIEW_KEY = 'zt-view-mode'
 
@@ -95,6 +96,15 @@ function Main(props: {
   const { servers, status } = useServers()
 
   const list = useMemo(() => [...servers.values()], [servers])
+
+  // 告警中心（所有登录用户）
+  if (hash === '#/alerts') {
+    return (
+      <Shell status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+        <Alerts isAdmin={me.role === 'admin'} />
+      </Shell>
+    )
+  }
 
   // 管理页
   if (hash === '#/admin') {
@@ -193,6 +203,13 @@ function Shell(props: {
           </button>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{me.username}</span>
+            <button
+              className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="告警中心"
+              onClick={() => navigate('#/alerts')}
+            >
+              <Bell className="size-4" />
+            </button>
             {me.role === 'admin' && (
               <button
                 className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"

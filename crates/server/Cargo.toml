@@ -37,3 +37,5 @@ totp-rs = { workspace = true }
 axum-extra = { workspace = true }
 rcgen = { workspace = true }
 tower = { workspace = true }
+reqwest = { workspace = true }
+lettre = { workspace = true }

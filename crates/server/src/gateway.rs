@@ -73,17 +73,15 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
         let _ = state.dash_tx.send(DashboardEvent::Update { server: view });
     }
 
-    // 4. 消息循环
-    let mut last_persist = Instant::now();
+    // 4. 消息循环（persist 用 interval：跨 select 保持计时，不受消息频率影响）
+    let mut persist_ticker = tokio::time::interval(Duration::from_secs(60));
+    persist_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    persist_ticker.tick().await; // 消费首个立即 tick
     loop {
         let msg = tokio::select! {
             m = socket.recv() => m,
-            _ = tokio::time::sleep(Duration::from_secs(60)) => {
-                // 周期性保活：持久化 last_seen + 检查在线（WS 由 axum 内建 ping/pong 保活）
-                if last_persist.elapsed() >= Duration::from_secs(60) {
-                    state.persist_last_seen(&[agent_id.clone()]);
-                    last_persist = Instant::now();
-                }
+            _ = persist_ticker.tick() => {
+                state.persist_last_seen(&[agent_id.clone()]);
                 continue;
             }
         };
