@@ -1,0 +1,21 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Data (local dev)
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets
+*.pem
+*.key
+.env
+
+# OS
+.DS_Store

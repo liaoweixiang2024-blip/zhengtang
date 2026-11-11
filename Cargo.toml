@@ -1,0 +1,55 @@
+[workspace]
+resolver = "2"
+members = ["crates/proto", "crates/server", "crates/agent"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+proto = { path = "crates/proto" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+postcard = { version = "1", features = ["alloc"] }
+tokio = { version = "1", features = ["full"] }
+ed25519-dalek = "3"
+rand = "0.9"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+toml = "1"
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.11"
+data-encoding = "2"
+base64 = "0.23"
+
+# 全链路 rustls（ring provider），禁止 openssl —— musl 交叉编译关键。
+# 进程启动时统一安装 ring provider，之后所有 rustls builder 默认走 ring。
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls-pemfile = "2"
+
+# server
+axum = { version = "0.8", features = ["ws"] }
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "http1"] }
+rusqlite = { version = "0.42", features = ["bundled"] }
+tower = "0.5"
+rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+mime_guess = "2"
+dashmap = "6"
+rcgen = { version = "0.14", default-features = false, features = ["pem", "ring"] }
+
+# agent
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+webpki-roots = "1"
+futures-util = "0.3"
+sysinfo = "0.40"
+
+[profile.release]
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1
