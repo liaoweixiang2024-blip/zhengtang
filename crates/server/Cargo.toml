@@ -32,5 +32,8 @@ rusqlite = { workspace = true }
 rust-embed = { workspace = true }
 mime_guess = { workspace = true }
 dashmap = { workspace = true }
+argon2 = { workspace = true }
+totp-rs = { workspace = true }
+axum-extra = { workspace = true }
 rcgen = { workspace = true }
 tower = { workspace = true }

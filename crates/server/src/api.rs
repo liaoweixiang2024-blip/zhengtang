@@ -32,10 +32,35 @@ async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }))
 }
 
-async fn servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    // TODO(M4): 按会话用户组授权过滤；当前开发阶段直接返回全量
-    let views = state.server_views();
-    (StatusCode::OK, Json(json!({ "servers": views })))
+async fn servers(
+    State(state): State<Arc<AppState>>,
+    jar: axum_extra::extract::CookieJar,
+) -> impl IntoResponse {
+    // 按会话用户授权过滤：admin 全量；viewer 仅其组内；未登录 401
+    let Some(user) = crate::auth::current_user(&state, &jar) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "未登录" })),
+        )
+            .into_response();
+    };
+    let views: Vec<_> = state
+        .server_views()
+        .into_iter()
+        .filter(|v| v.id == "x-nomatch" || server_visible_to(&user, v.group_id))
+        .collect();
+    (StatusCode::OK, Json(json!({ "servers": views }))).into_response()
+}
+
+/// viewer 只能看到其授权组内的服务器（未分组的服务器仅 admin 可见）。
+pub fn server_visible_to(user: &crate::auth::AuthedUser, group_id: Option<i64>) -> bool {
+    if user.role == "admin" {
+        return true;
+    }
+    match group_id {
+        Some(g) => user.group_ids.contains(&g),
+        None => false,
+    }
 }
 
 #[derive(Deserialize)]

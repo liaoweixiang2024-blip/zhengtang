@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{ConnectInfo, State, WebSocketUpgrade};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use proto::{
     handshake_signing_payload, AgentMsg, ServerMsg, HANDSHAKE_TIMESTAMP_WINDOW_SECS,
@@ -193,15 +193,45 @@ pub async fn send_proto(socket: &mut WebSocket, msg: &ServerMsg) -> Result<(), a
 }
 
 /// 仪表盘 WS：连接即推全量快照，此后转发增量。
+/// 需登录；viewer 按组过滤。
 pub async fn ws_dashboard_handler(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
-    ws.on_upgrade(|mut socket| async move {
-        // 全量快照
+    // 鉴权：从 Cookie 头提取 session
+    let token = headers
+        .get(axum::http::header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|cookies| {
+            cookies.split("; ").find_map(|c| {
+                c.strip_prefix("zt_session=").map(str::to_string)
+            })
+        });
+    let user = match token {
+        Some(t) => state
+            .store
+            .with(|c| Ok(crate::auth::session_user(c, &t)))
+            .ok()
+            .flatten(),
+        None => None,
+    };
+    let Some(user) = user else {
+        return axum::http::StatusCode::UNAUTHORIZED.into_response();
+    };
+
+    ws.on_upgrade(move |mut socket| async move {
+        let allowed = |group_id: Option<i64>| -> bool {
+            crate::api::server_visible_to(&user, group_id)
+        };
+        // 全量快照（按组过滤）
         let snapshot = json!({
             "type": "snapshot",
-            "servers": state.server_views(),
+            "servers": state
+                .server_views()
+                .into_iter()
+                .filter(|v| allowed(v.group_id))
+                .collect::<Vec<_>>(),
         });
         if socket.send(Message::Text(snapshot.to_string().into())).await.is_err() {
             return;
@@ -213,16 +243,31 @@ pub async fn ws_dashboard_handler(
                 evt = rx.recv() => {
                     match evt {
                         Ok(e) => {
+                            // 按用户组过滤增量事件
+                            let visible = match &e {
+                                DashboardEvent::Update { server } => allowed(server.group_id),
+                                DashboardEvent::Offline { id } => state
+                                    .server_view(id)
+                                    .map(|v| allowed(v.group_id))
+                                    .unwrap_or(false),
+                            };
+                            if !visible {
+                                continue;
+                            }
                             let text = serde_json::to_string(&e).expect("json 序列化");
                             if socket.send(Message::Text(text.into())).await.is_err() {
                                 break;
                             }
                         }
                         Err(broadcast::error::RecvError::Lagged(_)) => {
-                            // 消费滞后：重发快照
+                            // 消费滞后：重发快照（按组过滤）
                             let snapshot = json!({
                                 "type": "snapshot",
-                                "servers": state.server_views(),
+                                "servers": state
+                                    .server_views()
+                                    .into_iter()
+                                    .filter(|v| allowed(v.group_id))
+                                    .collect::<Vec<_>>(),
                             });
                             if socket.send(Message::Text(snapshot.to_string().into())).await.is_err() {
                                 break;

@@ -2,10 +2,14 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
 use rcgen::{generate_simple_self_signed, CertifiedKey};
 use sha2::{Digest, Sha256};
+
+/// 进程内共享的证书指纹（管理 API 展示安装命令用）。
+pub static FINGERPRINT: OnceLock<String> = OnceLock::new();
 
 pub struct ServerCert {
     pub cert_pem: String,
@@ -23,6 +27,7 @@ pub fn ensure_cert(data_dir: &Path) -> Result<ServerCert> {
         let cert_pem = std::fs::read_to_string(&cert_path)?;
         let key_pem = std::fs::read_to_string(&key_path)?;
         let fingerprint = fingerprint_of_pem(&cert_pem)?;
+        let _ = FINGERPRINT.set(fingerprint.clone());
         return Ok(ServerCert { cert_pem, key_pem, fingerprint_hex: fingerprint });
     }
 
@@ -43,6 +48,7 @@ pub fn ensure_cert(data_dir: &Path) -> Result<ServerCert> {
     }
 
     let fingerprint = fingerprint_of_der(cert.der().as_ref());
+    let _ = FINGERPRINT.set(fingerprint.clone());
     Ok(ServerCert { cert_pem, key_pem, fingerprint_hex: fingerprint })
 }
 

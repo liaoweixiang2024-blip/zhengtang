@@ -33,6 +33,7 @@ rustls-pemfile = "2"
 
 # server
 axum = { version = "0.8", features = ["ws"] }
+axum-extra = { version = "0.12", features = ["cookie"] }
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "http1"] }
 rusqlite = { version = "0.42", features = ["bundled"] }
@@ -40,6 +41,8 @@ tower = "0.5"
 rust-embed = { version = "8", features = ["interpolate-folder-path"] }
 mime_guess = "2"
 dashmap = "6"
+argon2 = "0.5"
+totp-rs = { version = "5", features = ["otpauth", "gen_secret"] }
 rcgen = { version = "0.14", default-features = false, features = ["pem", "ring"] }
 
 # agent

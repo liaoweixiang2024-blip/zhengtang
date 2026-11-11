@@ -3,6 +3,8 @@
 //! 默认在 :8800 起 HTTPS/WSS（自签证书 + 指纹固定）；`--http` 用于反代场景。
 
 mod api;
+mod auth;
+mod auth_api;
 mod embed;
 mod gateway;
 mod jobs;
@@ -127,6 +129,7 @@ async fn serve(data_dir: &PathBuf, listen: &str, http: bool, metrics_interval: u
     jobs::spawn(state.clone());
 
     let app = api::router()
+        .merge(auth_api::router())
         .route("/ws/agent", axum::routing::get(gateway::ws_agent_handler))
         .route("/ws/dashboard", axum::routing::get(gateway::ws_dashboard_handler))
         .fallback(embed::static_handler)

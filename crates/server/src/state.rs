@@ -55,6 +55,8 @@ pub struct ServerReg {
 
 pub struct AppState {
     pub store: Arc<Store>,
+    /// 登录防爆破（指数退避）
+    pub brute: crate::auth::BruteGuard,
     /// agent_id → 实时状态
     pub live: DashMap<String, LiveAgent>,
     /// 最近一次指标（含离线机器最后的快照，重启丢失——低价值数据可接受）
@@ -74,6 +76,7 @@ impl AppState {
         let (dash_tx, _) = broadcast::channel(256);
         let state = Self {
             store,
+            brute: Default::default(),
             live: DashMap::new(),
             metrics: DashMap::new(),
             system_info: DashMap::new(),
