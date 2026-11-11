@@ -230,8 +230,11 @@ pub async fn ws_dashboard_handler(
                         Err(broadcast::error::RecvError::Closed) => break,
                     }
                 }
-                _ = socket.recv() => {
-                    // 客户端消息（心跳等）忽略；连接关闭则退出
+                msg = socket.recv() => {
+                    // 客户端消息（心跳等）忽略；连接关闭则退出（防止空转）
+                    if msg.is_none() {
+                        break;
+                    }
                 }
             }
         }

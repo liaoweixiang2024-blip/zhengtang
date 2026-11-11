@@ -59,6 +59,13 @@ fn main() -> Result<()> {
     // 统一安装 ring crypto provider（全链路禁 openssl，musl 交叉编译友好）
     let _ = rustls::crypto::ring::default_provider().install_default();
 
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
     let cli = Cli::parse();
     std::fs::create_dir_all(&cli.data_dir)
         .with_context(|| format!("创建数据目录失败: {}", cli.data_dir.display()))?;
