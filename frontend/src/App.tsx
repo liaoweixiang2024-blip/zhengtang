@@ -77,7 +77,15 @@ export default function App() {
 
   // 未登录 / 首启向导
   if (!me) {
-    return <Login setupNeeded={setupNeeded} onDone={() => { loadMe(); navigate('/') }} />
+    return (
+      <Login
+        setupNeeded={setupNeeded}
+        onDone={() => {
+          loadMe()
+          navigate(path && path !== '/login' ? path : '/')
+        }}
+      />
+    )
   }
 
   return <Main
@@ -129,15 +137,30 @@ function Main(props: {
   }
 
   // 详情页
-  const detailId = path.startsWith('/server/') ? path.slice('/server/'.length) : null
+  const detailId = path.startsWith('/server/') ? decodeURIComponent(path.slice('/server/'.length)) : null
   const detailServer = detailId ? servers.get(detailId) : null
   if (detailId) {
     return (
       <Shell status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         {detailServer ? (
           <ServerDetail server={detailServer} onBack={() => navigate('/')} />
+        ) : status === 'open' ? (
+          // WS 已连通快照仍无此机器：不存在或无权限（不再永久"加载中"卡死）
+          <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
+            <p>服务器不存在或无权访问</p>
+            <button className="text-sm underline underline-offset-4" onClick={() => navigate('/')}>
+              返回仪表盘
+            </button>
+          </div>
         ) : (
-          <div className="py-20 text-center text-muted-foreground">加载中…</div>
+          <div className="py-20 text-center text-muted-foreground">
+            连接实时数据中…
+            <div className="mt-2">
+              <button className="text-sm underline underline-offset-4" onClick={() => navigate('/')}>
+                返回仪表盘
+              </button>
+            </div>
+          </div>
         )}
       </Shell>
     )

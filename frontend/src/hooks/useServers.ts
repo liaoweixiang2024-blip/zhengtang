@@ -54,6 +54,12 @@ export function useServers() {
         if (!closed) {
           const delay = Math.min(1000 * 2 ** retry, 15000)
           retry++
+          // 连续失败多次：校验登录态，session 失效则整页重载走登录流（避免 401 死循环式重连）
+          if (retry > 5) {
+            fetch('/api/auth/me').then((r) => {
+              if (!r.ok) location.reload()
+            }).catch(() => {})
+          }
           timer = setTimeout(connect, delay)
         }
       }
