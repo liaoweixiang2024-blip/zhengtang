@@ -12,6 +12,7 @@ use rusqlite::Connection;
 const MIGRATIONS: &[(&str, &str)] = &[
     ("001_init", include_str!("../migrations/001_init.sql")),
     ("002_sessions", include_str!("../migrations/002_sessions.sql")),
+    ("003_settings", include_str!("../migrations/003_settings.sql")),
 ];
 
 pub struct Store {

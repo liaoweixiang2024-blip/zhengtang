@@ -15,7 +15,7 @@ interface PublicServer {
   uptime_secs: number | null
 }
 
-export function PublicPage() {
+export function PublicPage({ siteName }: { siteName?: string }) {
   const [servers, setServers] = useState<PublicServer[]>([])
   useEffect(() => {
     const load = () =>
@@ -29,7 +29,7 @@ export function PublicPage() {
     <div className="min-h-svh bg-background text-foreground">
       <header className="border-b">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <span className="text-lg font-semibold tracking-tight">zhengtang</span>
+          <span className="text-lg font-semibold tracking-tight">{siteName ?? 'zhengtang'}</span>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">公开状态页 · 5s 自动刷新</span>
             <ThemeToggle />

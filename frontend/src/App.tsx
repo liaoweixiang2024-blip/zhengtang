@@ -32,11 +32,13 @@ function usePathRoute(): [string, (to: string) => void] {
 }
 
 interface Me { username: string; role: string; group_ids: number[] }
+interface Site { site_name: string; site_description: string; public_page_enabled: boolean }
 
 export default function App() {
   const [path, navigate] = usePathRoute()
   const [me, setMe] = useState<Me | null | undefined>(undefined) // undefined=加载中
   const [setupNeeded, setSetupNeeded] = useState(false)
+  const [site, setSite] = useState<Site>({ site_name: 'zhengtang', site_description: '', public_page_enabled: true })
   const [view, setView] = useState<ViewMode>(
     () => (localStorage.getItem(VIEW_KEY) as ViewMode) || 'detailed',
   )
@@ -53,7 +55,21 @@ export default function App() {
   useEffect(() => {
     fetch('/api/status')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setSetupNeeded(!!d?.setup_needed))
+      .then((d) => {
+        if (!d) return
+        setSetupNeeded(!!d.setup_needed)
+        const s: Site = {
+          site_name: d.site_name || 'zhengtang',
+          site_description: d.site_description || '',
+          public_page_enabled: d.public_page_enabled !== false,
+        }
+        setSite(s)
+        // SEO：动态 title/description（SPA 环境下对执行 JS 的爬虫生效）
+        document.title = `${s.site_name} · 服务器探针`
+        if (s.site_description) {
+          document.querySelector('meta[name=description]')?.setAttribute('content', s.site_description)
+        }
+      })
       .catch(() => setSetupNeeded(false))
   }, [])
 
@@ -68,9 +84,11 @@ export default function App() {
     navigate('/login')
   }
 
-  // 公开展示页：匿名可访问（在登录判断之前）
+  // 公开展示页：匿名可访问（在登录判断之前）；总开关关闭时提示
   if (path === '/public') {
-    return <PublicPage />
+    return site.public_page_enabled ? <PublicPage siteName={site.site_name} /> : (
+      <div className="flex min-h-svh items-center justify-center text-muted-foreground">公开页未开放</div>
+    )
   }
 
   // 加载中
@@ -92,6 +110,7 @@ export default function App() {
   }
 
   return <Main
+    siteName={site.site_name}
     path={path}
     navigate={navigate}
     me={me}
@@ -104,6 +123,7 @@ export default function App() {
 }
 
 function Main(props: {
+  siteName: string
   path: string
   navigate: (h: string) => void
   me: Me
@@ -113,7 +133,7 @@ function Main(props: {
   setGroup: (g: number | 'all') => void
   onLogout: () => void
 }) {
-  const { path, navigate, me, view, changeView, group, setGroup, onLogout } = props
+  const { siteName, path, navigate, me, view, changeView, group, setGroup, onLogout } = props
   const { servers, status } = useServers()
 
   const list = useMemo(() => [...servers.values()], [servers])
@@ -127,7 +147,7 @@ function Main(props: {
   // 告警中心（所有登录用户）
   if (path === '/alerts') {
     return (
-      <Shell status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         <Alerts isAdmin={me.role === 'admin'} />
       </Shell>
     )
@@ -139,7 +159,7 @@ function Main(props: {
       return <div className="py-20 text-center text-muted-foreground">需要管理员权限</div>
     }
     return (
-      <Shell status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         <Admin />
       </Shell>
     )
@@ -150,7 +170,7 @@ function Main(props: {
   const detailServer = detailId ? servers.get(detailId) : null
   if (detailId) {
     return (
-      <Shell status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         {detailServer ? (
           <ServerDetail server={detailServer} onBack={() => navigate('/')} />
         ) : status === 'open' ? (
@@ -180,7 +200,7 @@ function Main(props: {
   const sorted = [...filtered].sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
 
   return (
-    <Shell status={status} me={me} navigate={navigate} onLogout={onLogout} view={view} changeView={changeView}>
+    <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} view={view} changeView={changeView}>
       <div className="space-y-5">
         <StatCards servers={list} />
         {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
@@ -213,6 +233,7 @@ function Main(props: {
 }
 
 function Shell(props: {
+  siteName: string
   status: string
   me: Me
   navigate: (h: string) => void
@@ -222,13 +243,13 @@ function Shell(props: {
   changeView?: (v: ViewMode) => void
   children: React.ReactNode
 }) {
-  const { status, me, navigate, onLogout, bare, view, changeView, children } = props
+  const { siteName, status, me, navigate, onLogout, bare, view, changeView, children } = props
   return (
     <div className="min-h-svh bg-background text-foreground">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <button className="flex items-center gap-2" onClick={() => navigate('/')}>
-            <span className="text-lg font-semibold tracking-tight">zhengtang</span>
+            <span className="text-lg font-semibold tracking-tight">{siteName}</span>
             <span
               className={cn(
                 'size-2 rounded-full',

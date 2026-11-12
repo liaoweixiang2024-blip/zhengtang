@@ -26,11 +26,15 @@ async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         .store
         .with(|c| Ok(c.query_row("SELECT COUNT(*) FROM users", [], |r| r.get::<_, i64>(0))?))
         .unwrap_or(0);
+    let st = state.settings();
     Json(json!({
         "version": env!("CARGO_PKG_VERSION"),
         "protocol_version": proto::PROTOCOL_VERSION,
         // 首启向导判定：无用户时前端引导创建管理员
         "setup_needed": user_count == 0,
+        "site_name": st.site_name,
+        "site_description": st.site_description,
+        "public_page_enabled": st.public_page_enabled,
     }))
 }
 
@@ -142,6 +146,10 @@ fn current_month() -> String {
 
 /// 公开展示：仅 public_visible 服务器；不含 IP/系统详情/到期价等敏感字段。
 async fn public_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    // 总开关关闭时公开页不下发任何数据
+    if !state.settings().public_page_enabled {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "公开页未开放" }))).into_response();
+    }
     let views: Vec<_> = state
         .server_views()
         .into_iter()
@@ -160,5 +168,5 @@ async fn public_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse
             })
         })
         .collect();
-    (StatusCode::OK, Json(json!({ "servers": views })))
+    (StatusCode::OK, Json(json!({ "servers": views }))).into_response()
 }

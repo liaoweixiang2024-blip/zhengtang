@@ -26,11 +26,13 @@ export function Admin() {
         <TabsTrigger value="groups">分组</TabsTrigger>
         <TabsTrigger value="users">用户</TabsTrigger>
         <TabsTrigger value="audit">审计日志</TabsTrigger>
+        <TabsTrigger value="settings">设置</TabsTrigger>
       </TabsList>
       <TabsContent value="servers"><ServersTab /></TabsContent>
       <TabsContent value="groups"><GroupsTab /></TabsContent>
       <TabsContent value="users"><UsersTab /></TabsContent>
       <TabsContent value="audit"><AuditTab /></TabsContent>
+      <TabsContent value="settings"><SettingsTab /></TabsContent>
     </Tabs>
   )
 }
@@ -550,5 +552,85 @@ function ProcDialog({ server, onClose }: { server: ServerView; onClose: () => vo
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+
+// ---------- 站点设置 ----------
+
+function SettingsTab() {
+  const [siteName, setSiteName] = useState('')
+  const [description, setDescription] = useState('')
+  const [publicEnabled, setPublicEnabled] = useState(true)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) return
+        setSiteName(d.site_name ?? '')
+        setDescription(d.site_description ?? '')
+        setPublicEnabled(d.public_page_enabled !== false)
+        setLoaded(true)
+      })
+  }, [])
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSaved(false)
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        site_name: siteName,
+        site_description: description,
+        public_page_enabled: publicEnabled,
+      }),
+    })
+    if (!res.ok) {
+      setError((await res.json()).error ?? '保存失败')
+      return
+    }
+    setSaved(true)
+    // 立即刷新标题，免手动刷新页面
+    document.title = `${siteName} · 服务器探针`
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  if (!loaded) return <div className="py-8 text-center text-muted-foreground">加载中…</div>
+  return (
+    <Card className="py-4">
+      <CardHeader><CardTitle className="text-base">站点设置</CardTitle></CardHeader>
+      <CardContent>
+        <form onSubmit={save} className="max-w-lg space-y-4">
+          <div className="space-y-2">
+            <Label>站点名称</Label>
+            <Input value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder="如 我的探针站" maxLength={32} />
+            <p className="text-xs text-muted-foreground">显示在页面标题、顶栏、登录页（1-32 字符）</p>
+          </div>
+          <div className="space-y-2">
+            <Label>站点描述（SEO）</Label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="网页 meta description" maxLength={160} />
+            <p className="text-xs text-muted-foreground">写入 &lt;meta name=description&gt;，供搜索引擎摘要（≤160 字符）</p>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <div className="text-sm font-medium">公开展示页</div>
+              <div className="text-xs text-muted-foreground">
+                关闭后 /public 与其数据 API 对外不可用（面板本身始终需要登录）
+              </div>
+            </div>
+            <Switch checked={publicEnabled} onCheckedChange={setPublicEnabled} />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {saved && <p className="text-sm text-emerald-600">已保存</p>}
+          <Button type="submit">保存设置</Button>
+        </form>
+      </CardContent>
+    </Card>
   )
 }

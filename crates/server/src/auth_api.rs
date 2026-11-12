@@ -36,6 +36,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/admin/users/{id}", delete(delete_user))
         .route("/api/admin/audit", get(list_audit))
         .route("/api/admin/fingerprint", get(get_fingerprint))
+        .route("/api/admin/settings", get(get_settings).put(put_settings))
         // 告警
         .route("/api/alerts/events", get(alert_events))
         .route("/api/admin/channels", get(list_channels).post(add_channel))
@@ -982,5 +983,54 @@ async fn delete_process_rule(
     if let Some(sid) = sid {
         state.push_process_rules(&sid);
     }
+    Json(json!({ "ok": true })).into_response()
+}
+
+
+// ---------- 站点设置 ----------
+
+async fn get_settings(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    Json(serde_json::to_value(state.settings()).unwrap()).into_response()
+}
+
+#[derive(Deserialize)]
+struct SettingsBody {
+    site_name: Option<String>,
+    site_description: Option<String>,
+    public_page_enabled: Option<bool>,
+}
+
+async fn put_settings(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    jar: CookieJar,
+    Json(body): Json<SettingsBody>,
+) -> impl IntoResponse {
+    let Ok(admin) = require_admin(&state, &jar) else {
+        return err(StatusCode::FORBIDDEN, "需要管理员权限");
+    };
+    let mut s = state.settings();
+    if let Some(v) = body.site_name {
+        let v = v.trim().to_string();
+        if v.is_empty() || v.chars().count() > 32 {
+            return err(StatusCode::BAD_REQUEST, "站点名称 1-32 字符");
+        }
+        s.site_name = v;
+    }
+    if let Some(v) = body.site_description {
+        if v.chars().count() > 160 {
+            return err(StatusCode::BAD_REQUEST, "描述 ≤160 字符");
+        }
+        s.site_description = v;
+    }
+    if let Some(v) = body.public_page_enabled {
+        s.public_page_enabled = v;
+    }
+    state.set_settings(&s);
+    auth::audit_state(&state, Some(&admin), "settings", "更新站点设置", &auth::client_ip(&headers, Some(peer)));
     Json(json!({ "ok": true })).into_response()
 }

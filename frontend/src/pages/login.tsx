@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-export function Login({ setupNeeded, onDone }: { setupNeeded: boolean; onDone: () => void }) {
+export function Login({ setupNeeded, siteName, onDone }: { setupNeeded: boolean; siteName?: string; onDone: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [totp, setTotp] = useState('')
@@ -44,7 +44,7 @@ export function Login({ setupNeeded, onDone }: { setupNeeded: boolean; onDone: (
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-xl">zhengtang</CardTitle>
+          <CardTitle className="text-xl">{siteName ?? 'zhengtang'}</CardTitle>
           <CardDescription>{setupNeeded ? '创建管理员账号' : '登录探针面板'}</CardDescription>
         </CardHeader>
         <CardContent>

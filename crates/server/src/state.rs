@@ -42,6 +42,25 @@ pub struct ServerView {
     pub traffic_quota_bytes: Option<i64>,
 }
 
+/// 站点设置（DB settings 表，带默认值）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SiteSettings {
+    pub site_name: String,
+    pub site_description: String,
+    /// 公开展示页总开关
+    pub public_page_enabled: bool,
+}
+
+impl Default for SiteSettings {
+    fn default() -> Self {
+        Self {
+            site_name: "zhengtang".into(),
+            site_description: "服务器在线状态与资源监控".into(),
+            public_page_enabled: true,
+        }
+    }
+}
+
 /// 静态注册信息（DB 读出，低频刷新）。
 #[derive(Debug, Clone)]
 pub struct ServerReg {
@@ -191,6 +210,37 @@ impl AppState {
 
     pub fn server_view(&self, id: &str) -> Option<ServerView> {
         self.server_views().into_iter().find(|v| v.id == id)
+    }
+
+    pub fn settings(&self) -> SiteSettings {
+        let mut s = SiteSettings::default();
+        let _ = self.store.with(|c| {
+            let get = |k: &str| -> Option<String> {
+                c.query_row("SELECT value FROM settings WHERE key = ?1", [k], |r| r.get(0)).ok()
+            };
+            if let Some(v) = get("site_name") { s.site_name = v; }
+            if let Some(v) = get("site_description") { s.site_description = v; }
+            if let Some(v) = get("public_page_enabled") { s.public_page_enabled = v != "0"; }
+            Ok(())
+        });
+        s
+    }
+
+    pub fn set_settings(&self, s: &SiteSettings) {
+        let _ = self.store.with(|c| {
+            for (k, v) in [
+                ("site_name", s.site_name.clone()),
+                ("site_description", s.site_description.clone()),
+                ("public_page_enabled", if s.public_page_enabled { "1".into() } else { "0".into() }),
+            ] {
+                c.execute(
+                    "INSERT INTO settings (key, value) VALUES (?1, ?2)
+                     ON CONFLICT(key) DO UPDATE SET value = ?2",
+                    rusqlite::params![k, v],
+                )?;
+            }
+            Ok(())
+        });
     }
 
     /// 持久化 last_seen（低频：每分钟由 gateway 调用，避免写放大）。
