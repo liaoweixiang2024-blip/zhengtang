@@ -218,11 +218,11 @@ function Shell(props: {
             </button>
             {me.role === 'admin' && (
               <button
-                className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"
-                title="管理"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 onClick={() => navigate('#/admin')}
               >
                 <Settings className="size-4" />
+                管理
               </button>
             )}
             {view && changeView && <ViewModeToggle value={view} onChange={changeView} />}
