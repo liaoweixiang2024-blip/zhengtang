@@ -2,12 +2,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { fmtBytes } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Activity } from 'lucide-react'
+
+interface DialRow {
+  task_id: number
+  kind: string
+  target: string
+  ok: boolean | null
+  latency_ms: number | null
+  status: string | null
+  ts: number | null
+}
 
 interface HistoryPoint {
   ts: number
@@ -31,6 +42,7 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
   const [points, setPoints] = useState<HistoryPoint[]>([])
   const [monthTraffic, setMonthTraffic] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [dial, setDial] = useState<DialRow[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -46,6 +58,17 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
       .catch(() => {
         if (!cancelled) setLoading(false)
       })
+    return () => {
+      cancelled = true
+    }
+  }, [server.id, range])
+
+  // 拨测结果（每任务最近一条 + 简史）
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/servers/${server.id}/dial-results`)
+      .then((r) => r.json())
+      .then((d) => !cancelled && setDial(d.results ?? []))
     return () => {
       cancelled = true
     }
@@ -131,6 +154,39 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
                 )}
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 拨测 */}
+      {dial.some((d) => d.ts != null) && (
+        <Card className="py-4">
+          <CardHeader className="pb-0">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <Activity className="size-4" /> 拨测
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 px-4 pt-2 text-sm">
+            {[...new Map(dial.filter((d) => d.ts != null).map((d) => [d.task_id, d])).values()].map((latest) => {
+              const history = dial.filter((d) => d.task_id === latest.task_id)
+              const fails = history.filter((d) => d.ok === false).length
+              return (
+                <div key={latest.task_id} className="flex flex-wrap items-center gap-2 border-b py-1.5 last:border-0">
+                  <Badge variant={latest.ok ? 'secondary' : 'destructive'} className="font-mono text-xs">
+                    {latest.kind.toUpperCase()}
+                  </Badge>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{latest.target}</span>
+                  {latest.ok ? (
+                    <span className="tabular-nums text-emerald-600">{latest.latency_ms}ms</span>
+                  ) : (
+                    <span className="text-red-500">{latest.status}</span>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    最近 20 次 · 失败 {fails}
+                  </span>
+                </div>
+              )
+            })}
           </CardContent>
         </Card>
       )}

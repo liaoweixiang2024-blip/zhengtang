@@ -41,6 +41,11 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/admin/channels", get(list_channels).post(add_channel))
         .route("/api/admin/channels/{id}", delete(delete_channel))
         .route("/api/admin/channels/{id}/test", post(test_channel))
+        // 拨测任务
+        .route("/api/admin/servers/{id}/dial-tasks", get(list_dial_tasks).post(add_dial_task))
+        .route("/api/admin/dial-tasks/{task_id}", delete(delete_dial_task))
+        // 拨测结果（详情页，登录用户）
+        .route("/api/servers/{id}/dial-results", get(dial_results))
 }
 
 fn err(status: StatusCode, msg: &str) -> axum::response::Response {
@@ -725,4 +730,166 @@ async fn test_channel(
     } else {
         err(StatusCode::BAD_GATEWAY, "发送失败，查看服务端日志")
     }
+}
+
+
+// ---------- 拨测 ----------
+
+async fn list_dial_tasks(State(state): State<Arc<AppState>>, jar: CookieJar, Path(id): Path<String>) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let tasks = state
+        .store
+        .with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT id, kind, target, interval_secs, enabled FROM dial_tasks WHERE server_id = ?1 ORDER BY id",
+            )?;
+            let rows = stmt
+                .query_map([&id], |r| {
+                    Ok(json!({
+                        "id": r.get::<_, i64>(0)?,
+                        "kind": r.get::<_, String>(1)?,
+                        "target": r.get::<_, String>(2)?,
+                        "interval_secs": r.get::<_, i64>(3)?,
+                        "enabled": r.get::<_, i64>(4)? != 0,
+                    }))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .unwrap_or_default();
+    Json(json!({ "tasks": tasks })).into_response()
+}
+
+#[derive(Deserialize)]
+struct AddDialTaskBody {
+    /// "http" | "tcp"
+    kind: String,
+    /// http: 完整 URL；tcp: host:port
+    target: String,
+    #[serde(default = "default_interval")]
+    interval_secs: i64,
+}
+
+fn default_interval() -> i64 {
+    60
+}
+
+async fn add_dial_task(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+    Json(body): Json<AddDialTaskBody>,
+) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    // SSRF 防护：仅 http/https 的 URL、或 host:port；长度限制；协议白名单
+    if body.target.len() > 512 {
+        return err(StatusCode::BAD_REQUEST, "目标过长");
+    }
+    match body.kind.as_str() {
+        "http" => {
+            if !body.target.starts_with("http://") && !body.target.starts_with("https://") {
+                return err(StatusCode::BAD_REQUEST, "http 任务目标必须是 http(s):// URL");
+            }
+        }
+        "tcp" => {
+            if body.target.contains("://") || !body.target.contains(':') {
+                return err(StatusCode::BAD_REQUEST, "tcp 任务目标必须是 host:port");
+            }
+        }
+        _ => return err(StatusCode::BAD_REQUEST, "kind 必须是 http 或 tcp"),
+    }
+    let interval = body.interval_secs.clamp(10, 86400);
+    let _ = state.store.with(|c| {
+        c.execute(
+            "INSERT INTO dial_tasks (server_id, kind, target, interval_secs) VALUES (?1,?2,?3,?4)",
+            rusqlite::params![id, body.kind, body.target, interval],
+        )?;
+        Ok(())
+    });
+    state.push_dial_tasks(&id);
+    Json(json!({ "ok": true })).into_response()
+}
+
+async fn delete_dial_task(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Path(task_id): Path<i64>,
+) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    // 找回 server_id 用于推送更新
+    let sid: Option<String> = state
+        .store
+        .with(|c| {
+            Ok(c.query_row("SELECT server_id FROM dial_tasks WHERE id = ?1", [task_id], |r| r.get(0)).ok())
+        })
+        .unwrap_or(None);
+    let _ = state.store.with(|c| {
+        c.execute("DELETE FROM dial_tasks WHERE id = ?1", [task_id])?;
+        Ok(())
+    });
+    if let Some(sid) = sid {
+        state.push_dial_tasks(&sid);
+    }
+    Json(json!({ "ok": true })).into_response()
+}
+
+/// 最近拨测结果（详情页展示，登录用户按组过滤）。
+async fn dial_results(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let Some(user) = auth::current_user(&state, &jar) else {
+        return err(StatusCode::UNAUTHORIZED, "未登录");
+    };
+    let group_id: Option<Option<i64>> = state
+        .store
+        .with(|c| {
+            Ok(c.query_row("SELECT group_id FROM servers WHERE id = ?1", [&id], |r| r.get(0)).ok())
+        })
+        .unwrap_or(None);
+    let Some(group_id) = group_id else {
+        return err(StatusCode::NOT_FOUND, "服务器不存在");
+    };
+    if !crate::api::server_visible_to(&user, group_id) {
+        return err(StatusCode::FORBIDDEN, "无权访问");
+    }
+    // 每任务最近 20 条
+    let results = state
+        .store
+        .with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT t.id, t.kind, t.target, r.ok, r.latency_ms, r.status, r.ts
+                 FROM dial_tasks t
+                 LEFT JOIN (
+                     SELECT task_id, ok, latency_ms, status, ts,
+                            ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY ts DESC) rn
+                     FROM dial_results
+                 ) r ON r.task_id = t.id AND r.rn <= 20
+                 WHERE t.server_id = ?1
+                 ORDER BY t.id, r.ts DESC",
+            )?;
+            let rows = stmt
+                .query_map([&id], |r| {
+                    Ok(json!({
+                        "task_id": r.get::<_, i64>(0)?,
+                        "kind": r.get::<_, String>(1)?,
+                        "target": r.get::<_, String>(2)?,
+                        "ok": r.get::<_, Option<i64>>(3)?.map(|v| v != 0),
+                        "latency_ms": r.get::<_, Option<i64>>(4)?,
+                        "status": r.get::<_, Option<String>>(5)?,
+                        "ts": r.get::<_, Option<i64>>(6)?,
+                    }))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .unwrap_or_default();
+    Json(json!({ "results": results })).into_response()
 }

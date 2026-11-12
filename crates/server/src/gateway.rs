@@ -22,6 +22,7 @@ use serde_json::json;
 use tokio::sync::broadcast;
 
 use crate::state::{AppState, DashboardEvent};
+use crate::store::unix_now;
 
 pub async fn ws_agent_handler(
     State(state): State<Arc<AppState>>,
@@ -63,7 +64,7 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
     );
     let ok = ServerMsg::HelloOk {
         metrics_interval_secs: state.metrics_interval_secs,
-        server_time: crate::store::unix_now() as u64,
+        server_time: unix_now() as u64,
     };
     if send_proto(&mut socket, &ok).await.is_err() {
         state.live.remove(&agent_id);
@@ -73,6 +74,14 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
         let _ = state.dash_tx.send(DashboardEvent::Update { server: view });
     }
 
+    // 注册命令下发通道 + 立即下发当前拨测任务/进程规则
+    let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<ServerMsg>();
+    state.agent_cmds.insert(agent_id.clone(), cmd_tx);
+    let tasks = state.dial_tasks(&agent_id);
+    if send_proto(&mut socket, &ServerMsg::DialTasks(tasks)).await.is_err() {
+        tracing::debug!(agent = %agent_id, "初始拨测任务发送失败（连接即将关闭）");
+    }
+
     // 4. 消息循环（persist 用 interval：跨 select 保持计时，不受消息频率影响）
     let mut persist_ticker = tokio::time::interval(Duration::from_secs(60));
     persist_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -80,6 +89,15 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
     loop {
         let msg = tokio::select! {
             m = socket.recv() => m,
+            cmd = cmd_rx.recv() => {
+                // 管理端触发的任务推送
+                if let Some(m) = cmd {
+                    if send_proto(&mut socket, &m).await.is_err() {
+                        break;
+                    }
+                }
+                continue;
+            }
             _ = persist_ticker.tick() => {
                 state.persist_last_seen(&[agent_id.clone()]);
                 continue;
@@ -127,14 +145,28 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
                     let _ = state.dash_tx.send(DashboardEvent::Update { server: view });
                 }
             }
-            AgentMsg::DialResult { .. } => {
-                // M6 接入落库
+            AgentMsg::DialResult { task_id, ok, latency_ms, status } => {
+                if let Err(e) = state.store.with(|c| {
+                    c.execute(
+                        "INSERT OR REPLACE INTO dial_results (task_id, ts, ok, latency_ms, status) VALUES (?1,?2,?3,?4,?5)",
+                        rusqlite::params![task_id, unix_now(), ok as i64, latency_ms as i64, status],
+                    )?;
+                    // 只保留每任务最近 500 条（NOT IN 写法：行数 ≤500 时不会误删）
+                    let _ = c.execute(
+                        "DELETE FROM dial_results WHERE task_id = ?1 AND ts NOT IN (SELECT ts FROM dial_results WHERE task_id = ?1 ORDER BY ts DESC LIMIT 500)",
+                        [task_id],
+                    );
+                    Ok(())
+                }) {
+                    tracing::warn!(%e, "拨测结果落库失败");
+                }
             }
             AgentMsg::Pong { .. } => {}
         }
     }
 
     // 5. 离线清理
+    state.agent_cmds.remove(&agent_id);
     state.live.remove(&agent_id);
     state.persist_last_seen(&[agent_id.clone()]);
     tracing::info!(agent = %agent_id, "agent 离线");
@@ -161,7 +193,7 @@ async fn wait_hello(
     }
 
     // 时间窗校验（防重放）
-    let now = crate::store::unix_now() as u64;
+    let now = unix_now() as u64;
     if now.abs_diff(timestamp) > HANDSHAKE_TIMESTAMP_WINDOW_SECS {
         return Err("timestamp-window");
     }

@@ -96,8 +96,12 @@ pub async fn run_session(cfg: &Config, collector: &mut Collector) -> Result<()> 
     }
     tracing::info!(server = %cfg.server, interval = interval_secs, "已上线，开始上报");
 
-    // ---- 运行：指标通道 + 接收循环 ----
+    // ---- 运行：指标通道 + 接收循环 + 拨测调度 ----
     let (tx, mut rx) = mpsc::channel::<AgentMsg>(16);
+    let (dial_results_tx, mut dial_results_rx) = mpsc::unbounded_channel::<AgentMsg>();
+    let scheduler = crate::dial::DialScheduler::new(dial_results_tx);
+    let dial_tasks = scheduler.tasks.clone();
+    let dial_handle = tokio::spawn(scheduler.run());
 
     // 采集上报任务
     let report_tx = tx.clone();
@@ -134,7 +138,10 @@ pub async fn run_session(cfg: &Config, collector: &mut Collector) -> Result<()> 
                                 }
                             }
                             Ok(ServerMsg::ProcessRules(rules)) => collector.set_process_rules(rules),
-                            Ok(ServerMsg::DialTasks(_)) => { /* M6 实现拨测调度 */ }
+                            Ok(ServerMsg::DialTasks(tasks)) => {
+                                tracing::info!(count = tasks.len(), "收到拨测任务");
+                                *dial_tasks.write().await = tasks;
+                            }
                             Ok(ServerMsg::RequestFullReport) => full_report_due = true,
                             Ok(other) => tracing::debug!(?other, "忽略服务端消息"),
                             Err(e) => tracing::warn!(%e, "无法解码服务端消息"),
@@ -143,6 +150,13 @@ pub async fn run_session(cfg: &Config, collector: &mut Collector) -> Result<()> 
                     Some(Ok(_)) => {} // 非 Binary 帧忽略
                     Some(Err(e)) => break Err(anyhow!("连接错误: {e}")),
                     None => break Err(anyhow!("连接关闭")),
+                }
+            }
+            r = dial_results_rx.recv() => {
+                // 拨测结果直接透传（通道关闭不该发生）
+                let Some(msg) = r else { break Err(anyhow!("拨测通道关闭")) };
+                if let Err(e) = send(&mut ws, &msg).await {
+                    break Err(anyhow!(e));
                 }
             }
             msg = rx.recv() => {
@@ -168,6 +182,7 @@ pub async fn run_session(cfg: &Config, collector: &mut Collector) -> Result<()> 
         }
     };
     collect_handle.abort();
+    dial_handle.abort();
     session
 }
 

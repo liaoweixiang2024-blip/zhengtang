@@ -25,3 +25,4 @@ tokio-tungstenite = { workspace = true }
 webpki-roots = { workspace = true }
 futures-util = { workspace = true }
 sysinfo = { workspace = true }
+reqwest = { workspace = true }

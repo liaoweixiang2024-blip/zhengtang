@@ -5,6 +5,7 @@
 
 mod client;
 mod collect;
+mod dial;
 mod config;
 mod tls;
 

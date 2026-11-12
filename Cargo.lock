@@ -13,6 +13,7 @@ dependencies = [
  "futures-util",
  "postcard",
  "proto",
+ "reqwest",
  "rustls",
  "serde",
  "sha2 0.11.1",

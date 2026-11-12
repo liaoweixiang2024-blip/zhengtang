@@ -1,5 +1,6 @@
 // 管理页：服务器管理 / 用户 / 分组 / 审计日志
 import { useCallback, useEffect, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -11,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fmtBytes } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Radar, Trash2 } from 'lucide-react'
 
 interface Group { id: number; name: string }
 interface User { id: number; username: string; role: string; totp_enabled: boolean }
@@ -41,6 +42,7 @@ function ServersTab() {
   const [groups, setGroups] = useState<Group[]>([])
   const [addOpen, setAddOpen] = useState(false)
   const [installCmd, setInstallCmd] = useState<string | null>(null)
+  const [dialServer, setDialServer] = useState<ServerView | null>(null)
 
   const load = useCallback(() => {
     fetch('/api/admin/servers').then((r) => r.json()).then((d) => setServers(d.servers ?? []))
@@ -79,6 +81,7 @@ function ServersTab() {
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle className="text-base">服务器（{servers.length}）</CardTitle>
         <AddServerDialog open={addOpen} onOpenChange={setAddOpen} onAdd={add} installCmd={installCmd} onCopy={() => setInstallCmd(null)} />
+        {dialServer && <DialDialog server={dialServer} onClose={() => setDialServer(null)} />}
       </CardHeader>
       <CardContent>
         <Table>
@@ -89,6 +92,7 @@ function ServersTab() {
               <TableHead>到期日</TableHead>
               <TableHead className="hidden sm:table-cell">流量配额</TableHead>
               <TableHead>公开展示</TableHead>
+              <TableHead className="w-10">拨测</TableHead>
               <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
@@ -121,6 +125,11 @@ function ServersTab() {
                 </TableCell>
                 <TableCell>
                   <Switch checked={s.public_visible} onCheckedChange={(v) => update(s.id, { public_visible: v })} />
+                </TableCell>
+                <TableCell>
+                  <Button variant="ghost" size="icon" title="拨测任务" onClick={() => setDialServer(s)}>
+                    <Radar className="size-4 text-muted-foreground" />
+                  </Button>
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="icon" onClick={() => remove(s.id, s.name)}>
@@ -392,5 +401,79 @@ function AuditTab() {
         </Table>
       </CardContent>
     </Card>
+  )
+}
+
+
+// ---------- 拨测任务管理 ----------
+
+interface DialTaskRow { id: number; kind: string; target: string; interval_secs: number; enabled: boolean }
+
+function DialDialog({ server, onClose }: { server: ServerView; onClose: () => void }) {
+  const [tasks, setTasks] = useState<DialTaskRow[]>([])
+  const [kind, setKind] = useState('http')
+  const [target, setTarget] = useState('')
+  const [interval, setInterval] = useState('60')
+  const [error, setError] = useState('')
+
+  const load = useCallback(() => {
+    fetch(`/api/admin/servers/${server.id}/dial-tasks`).then((r) => r.json()).then((d) => setTasks(d.tasks ?? []))
+  }, [server.id])
+  useEffect(load, [load])
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (!target.trim()) return
+    const res = await fetch(`/api/admin/servers/${server.id}/dial-tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, target: target.trim(), interval_secs: Number(interval) || 60 }),
+    })
+    if (!res.ok) {
+      setError((await res.json()).error ?? '添加失败')
+      return
+    }
+    setTarget('')
+    load()
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>拨测任务 · {server.name}</DialogTitle>
+          <DialogDescription>由该服务器主动发起的受约束检查（HTTP GET / TCP 连通），间隔最少 10 秒</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          {tasks.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 border-b pb-1.5 text-sm last:border-0">
+              <Badge variant="outline" className="font-mono text-xs">{t.kind.toUpperCase()}</Badge>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs">{t.target}</span>
+              <span className="text-xs text-muted-foreground">{t.interval_secs}s</span>
+              <Button variant="ghost" size="icon" onClick={async () => {
+                await fetch(`/api/admin/dial-tasks/${t.id}`, { method: 'DELETE' })
+                load()
+              }}>
+                <Trash2 className="size-4 text-muted-foreground" />
+              </Button>
+            </div>
+          ))}
+          <form onSubmit={add} className="grid grid-cols-5 gap-2">
+            <Select value={kind} onValueChange={setKind}>
+              <SelectTrigger className="col-span-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="http">HTTP</SelectItem>
+                <SelectItem value="tcp">TCP</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder={kind === 'http' ? 'https://example.com' : 'example.com:443'} className="col-span-3 font-mono text-xs" />
+            <Input value={interval} onChange={(e) => setInterval(e.target.value)} type="number" min={10} title="间隔秒" className="col-span-1" />
+            <Button type="submit" className="col-span-5" size="sm"><Plus className="size-4" /> 添加任务</Button>
+          </form>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

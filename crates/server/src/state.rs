@@ -64,6 +64,8 @@ pub struct AppState {
     pub system_info: DashMap<String, SystemInfo>,
     /// 最近 ~70s 的 CPU 样本（1min 聚合用）
     pub cpu_history: DashMap<String, std::collections::VecDeque<(std::time::Instant, f32)>>,
+    /// 在线 agent 的命令下发通道（拨测/进程规则变更推送）
+    pub agent_cmds: DashMap<String, tokio::sync::mpsc::UnboundedSender<proto::ServerMsg>>,
     /// 注册表缓存（add-server / 删除时 invalidate + reload）
     pub registry: dashmap::DashMap<String, [u8; 32]>,
     pub dash_tx: broadcast::Sender<DashboardEvent>,
@@ -81,6 +83,7 @@ impl AppState {
             metrics: DashMap::new(),
             system_info: DashMap::new(),
             cpu_history: DashMap::new(),
+            agent_cmds: DashMap::new(),
             registry: DashMap::new(),
             dash_tx,
             metrics_interval_secs,
@@ -203,3 +206,50 @@ impl AppState {
         });
     }
 }
+
+impl AppState {
+    /// 某台服务器的拨测任务（转 proto 结构下发）。
+    pub fn dial_tasks(&self, server_id: &str) -> Vec<proto::DialTask> {
+        self.store
+            .with(|c| {
+                let mut stmt = c.prepare(
+                    "SELECT id, kind, target, interval_secs, timeout_ms FROM dial_tasks
+                     WHERE server_id = ?1 AND enabled = 1",
+                )?;
+                let rows = stmt
+                    .query_map([server_id], |r| {
+                        let kind: String = r.get(1)?;
+                        let target: String = r.get(2)?;
+                        let k = match kind.as_str() {
+                            "http" => proto::DialKind::HttpGet {
+                                url: target,
+                                expect_status: None,
+                            },
+                            _ => {
+                                // target 格式 host:port
+                                let (h, p) = target.rsplit_once(':').unwrap_or((target.as_str(), "80"));
+                                proto::DialKind::TcpConnect { host: h.to_string(), port: p.parse().unwrap_or(80) }
+                            }
+                        };
+                        Ok(proto::DialTask {
+                            id: r.get(0)?,
+                            kind: k,
+                            interval_secs: r.get::<_, i64>(3)? as u32,
+                            timeout_ms: r.get::<_, i64>(4)? as u32,
+                        })
+                    })?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                Ok(rows)
+            })
+            .unwrap_or_default()
+    }
+
+    /// 向在线 agent 推送其拨测任务全集。
+    pub fn push_dial_tasks(&self, server_id: &str) {
+        if let Some(tx) = self.agent_cmds.get(server_id) {
+            let _ = tx.send(ServerMsg::DialTasks(self.dial_tasks(server_id)));
+        }
+    }
+}
+
+use proto::ServerMsg;
