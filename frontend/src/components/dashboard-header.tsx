@@ -253,7 +253,7 @@ export function ViewModeToggle({ value, onChange }: { value: ViewMode; onChange:
     <GalleryVerticalEnd className="size-[18px]" strokeWidth={1.5} />
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger title="卡片形态" className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[state=open]:bg-accent data-[state=open]:text-foreground">
+      <DropdownMenuTrigger title="卡片形态" className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent data-[state=open]:bg-accent data-[state=open]:text-foreground">
         {icon}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

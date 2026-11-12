@@ -1,5 +1,6 @@
 // 告警中心：事件列表 + 通知渠道管理
 import { useCallback, useEffect, useState } from 'react'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -74,6 +75,7 @@ function ChannelsTab() {
   // 各类型配置字段（JSON 文本域，按类型给占位模板）
   const [config, setConfig] = useState('')
   const [error, setError] = useState('')
+  const [delChannel, setDelChannel] = useState<Channel | null>(null)
 
   const placeholder: Record<string, string> = {
     telegram: '{"bot_token":"123:abc","chat_id":"-100123"}',
@@ -145,12 +147,7 @@ function ChannelsTab() {
                     <Button variant="ghost" size="icon" title="测试发送" onClick={() => test(ch.id)}>
                       <Send className="size-4 text-muted-foreground" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={async () => {
-                      if (confirm(`删除渠道 ${ch.name}？`)) {
-                        await fetch(`/api/admin/channels/${ch.id}`, { method: 'DELETE' })
-                        load()
-                      }
-                    }}>
+                    <Button variant="ghost" size="icon" title="删除" onClick={() => setDelChannel(ch)}>
                       <Trash2 className="size-4 text-muted-foreground" />
                     </Button>
                   </div>
@@ -160,6 +157,19 @@ function ChannelsTab() {
           </TableBody>
         </Table>
         {channels.length === 0 && <p className="text-center text-muted-foreground">还没有渠道，添加后告警将推送到所有渠道</p>}
+        {delChannel && (
+          <ConfirmDialog
+            open
+            onOpenChange={(v) => !v && setDelChannel(null)}
+            title={`删除渠道 ${delChannel.name}？`}
+            description="删除后告警不再推送到该渠道。"
+            onConfirm={async () => {
+              await fetch(`/api/admin/channels/${delChannel.id}`, { method: 'DELETE' })
+              setDelChannel(null)
+              load()
+            }}
+          />
+        )}
       </CardContent>
     </Card>
   )

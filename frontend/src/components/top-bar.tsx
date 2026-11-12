@@ -48,7 +48,7 @@ export function TopBar(props: {
           ) : showLogin ? (
             <button
               onClick={() => navigate('/login')}
-              className="rounded-full px-3.5 py-1.5 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-full px-3.5 py-1.5 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent"
             >
               登录
             </button>
@@ -99,7 +99,7 @@ function UserMenu({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex size-8 items-center justify-center rounded-full outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40',
+          'inline-flex size-8 items-center justify-center rounded-full outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent',
           open ? 'bg-accent text-foreground' : 'text-muted-foreground',
         )}
       >

@@ -1,6 +1,6 @@
 // 路由：/ 仪表盘 | /server/{id} 详情 | /login 登录/向导 | /admin 管理 | /alerts 告警 | /public 公开页
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { GroupTabs, StatCards, type ViewMode } from '@/components/dashboard-header'
+import { GroupTabs, StatCards, ViewModeToggle, type ViewMode } from '@/components/dashboard-header'
 import { TopBar } from '@/components/top-bar'
 import { ServerCard, ServerCardMini } from '@/components/server-card'
 import { ServerTable } from '@/components/server-table'
@@ -194,6 +194,7 @@ function Main(props: {
         <Admin
           tab={parseAdminTab(path.split('?')[1] ?? '')}
           onTabChange={(k) => navigate(`/admin?tab=${k}`, true)}
+          navigate={navigate}
         />
       </Shell>
     )
@@ -234,10 +235,16 @@ function Main(props: {
   const sorted = [...filtered].sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
 
   return (
-    <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} view={view} changeView={changeView}>
+    <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout}>
       <div className="space-y-5">
         <StatCards servers={list} />
-        {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
+        {/* 分组标签 + 排版切换（同一行，切换靠右） */}
+        <div className="flex flex-wrap items-center gap-3">
+          {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
+          <span className="ml-auto">
+            <ViewModeToggle value={view} onChange={changeView} />
+          </span>
+        </div>
         {sorted.length === 0 ? (
           <div className="py-20 text-center text-muted-foreground">
             {list.length === 0 ? '还没有服务器，到「管理 → 服务器」添加一台' : '该分组暂无服务器'}

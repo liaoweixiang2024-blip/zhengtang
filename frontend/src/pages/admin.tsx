@@ -1,5 +1,6 @@
 // 管理页：服务器管理 / 分组 / 用户 / 审计日志 / 告警中心 / 设置
 import { useCallback, useEffect, useState } from 'react'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alerts } from '@/pages/alerts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,7 +38,11 @@ export function parseAdminTab(query: string): NavKey {
   return NAV.some((n) => n.key === t) ? (t as NavKey) : 'servers'
 }
 
-export function Admin({ tab, onTabChange }: { tab?: NavKey; onTabChange?: (k: NavKey) => void }) {
+export function Admin({ tab, onTabChange, navigate }: {
+  tab?: NavKey
+  onTabChange?: (k: NavKey) => void
+  navigate?: (h: string) => void
+}) {
   const [inner, setInner] = useState<NavKey>('servers')
   const active = tab ?? inner
   const select = (k: NavKey) => {
@@ -65,7 +70,7 @@ export function Admin({ tab, onTabChange }: { tab?: NavKey; onTabChange?: (k: Na
         ))}
       </nav>
       <div className="min-w-0 flex-1">
-        {active === 'servers' && <ServersTab />}
+        {active === 'servers' && <ServersTab navigate={navigate} />}
         {active === 'groups' && <GroupsTab />}
         {active === 'users' && <UsersTab />}
         {active === 'audit' && <AuditTab />}
@@ -78,7 +83,7 @@ export function Admin({ tab, onTabChange }: { tab?: NavKey; onTabChange?: (k: Na
 
 // ---------- 服务器管理 ----------
 
-function ServersTab() {
+function ServersTab({ navigate }: { navigate?: (h: string) => void }) {
   const [servers, setServers] = useState<ServerView[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [addOpen, setAddOpen] = useState(false)
@@ -86,6 +91,8 @@ function ServersTab() {
   const [dialServer, setDialServer] = useState<ServerView | null>(null)
   const [procServer, setProcServer] = useState<ServerView | null>(null)
   const [editServer, setEditServer] = useState<ServerView | null>(null)
+  const [delServer, setDelServer] = useState<ServerView | null>(null)
+  const openDetail = (id: string) => (navigate ? navigate(`/server/${id}`) : location.assign(`/server/${id}`))
 
   const load = useCallback(() => {
     fetch('/api/admin/servers').then((r) => r.json()).then((d) => setServers(d.servers ?? []))
@@ -104,9 +111,9 @@ function ServersTab() {
     load()
   }
 
-  const remove = async (id: string, name: string) => {
-    if (!confirm(`确定删除 ${name}？其历史数据将一并删除`)) return
+  const remove = async (id: string) => {
     await fetch(`/api/admin/servers/${id}`, { method: 'DELETE' })
+    setDelServer(null)
     load()
   }
 
@@ -128,6 +135,15 @@ function ServersTab() {
         {dialServer && <DialDialog server={dialServer} onClose={() => setDialServer(null)} />}
         {procServer && <ProcDialog server={procServer} onClose={() => setProcServer(null)} />}
         {editServer && <EditServerDialog server={editServer} groups={groups} onClose={() => setEditServer(null)} onSaved={load} />}
+        {delServer && (
+          <ConfirmDialog
+            open
+            onOpenChange={(v) => !v && setDelServer(null)}
+            title={`删除服务器 ${delServer.name}？`}
+            description="其历史指标、流量与拨测数据将一并删除，不可恢复。"
+            onConfirm={() => remove(delServer.id)}
+          />
+        )}
       </CardHeader>
       <CardContent>
         <Table>
@@ -146,7 +162,7 @@ function ServersTab() {
           </TableHeader>
           <TableBody>
             {servers.map((s) => (
-              <TableRow key={s.id}>
+              <TableRow key={s.id} className="cursor-pointer" onClick={() => openDetail(s.id)} title="点击查看详情">
                 <TableCell className="font-medium">{s.name}</TableCell>
                 <TableCell className="hidden text-xs md:table-cell">{fmtExpiresCell(s.expires_at)}</TableCell>
                 <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
@@ -156,23 +172,23 @@ function ServersTab() {
                 <TableCell className="hidden text-xs text-muted-foreground xl:table-cell">
                   {s.purchased_at ? dateStr(s.purchased_at) : '—'} · {s.traffic_reset_day ? `每月${s.traffic_reset_day}日` : '自然月'}
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="编辑" onClick={() => setEditServer(s)}>
                     <Pencil className="size-4 text-muted-foreground" />
                   </Button>
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="拨测任务" onClick={() => setDialServer(s)}>
                     <Radar className="size-4 text-muted-foreground" />
                   </Button>
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="进程监控" onClick={() => setProcServer(s)}>
                     <ListTree className="size-4 text-muted-foreground" />
                   </Button>
                 </TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="icon" onClick={() => remove(s.id, s.name)}>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="icon" title="删除" onClick={() => setDelServer(s)}>
                     <Trash2 className="size-4 text-muted-foreground" />
                   </Button>
                 </TableCell>
@@ -262,6 +278,7 @@ function AddServerDialog({
 function GroupsTab() {
   const [groups, setGroups] = useState<Group[]>([])
   const [name, setName] = useState('')
+  const [delGroup, setDelGroup] = useState<Group | null>(null)
 
   const load = useCallback(() => {
     fetch('/api/admin/groups').then((r) => r.json()).then((d) => setGroups(d.groups ?? []))
@@ -294,12 +311,7 @@ function GroupsTab() {
               <TableRow key={g.id}>
                 <TableCell>{g.name}</TableCell>
                 <TableCell className="w-10">
-                  <Button variant="ghost" size="icon" onClick={async () => {
-                    if (confirm(`删除分组 ${g.name}？`)) {
-                      await fetch(`/api/admin/groups/${g.id}`, { method: 'DELETE' })
-                      load()
-                    }
-                  }}>
+                  <Button variant="ghost" size="icon" title="删除" onClick={() => setDelGroup(g)}>
                     <Trash2 className="size-4 text-muted-foreground" />
                   </Button>
                 </TableCell>
@@ -307,6 +319,19 @@ function GroupsTab() {
             ))}
           </TableBody>
         </Table>
+        {delGroup && (
+          <ConfirmDialog
+            open
+            onOpenChange={(v) => !v && setDelGroup(null)}
+            title={`删除分组 ${delGroup.name}？`}
+            description="服务器将变为未分组，不会删除服务器本身。"
+            onConfirm={async () => {
+              await fetch(`/api/admin/groups/${delGroup.id}`, { method: 'DELETE' })
+              setDelGroup(null)
+              load()
+            }}
+          />
+        )}
       </CardContent>
     </Card>
   )
@@ -322,6 +347,7 @@ function UsersTab() {
   const [role, setRole] = useState('viewer')
   const [groupIds, setGroupIds] = useState<number[]>([])
   const [error, setError] = useState('')
+  const [delUser, setDelUser] = useState<User | null>(null)
 
   const load = useCallback(() => {
     fetch('/api/admin/users').then((r) => r.json()).then((d) => setUsers(d.users ?? []))
@@ -388,12 +414,7 @@ function UsersTab() {
                 <TableCell>{u.role === 'admin' ? '管理员' : '观察者'}</TableCell>
                 <TableCell>{u.totp_enabled ? '已启用' : '未启用'}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon" onClick={async () => {
-                    if (confirm(`删除用户 ${u.username}？`)) {
-                      await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE' })
-                      load()
-                    }
-                  }}>
+                  <Button variant="ghost" size="icon" title="删除" onClick={() => setDelUser(u)}>
                     <Trash2 className="size-4 text-muted-foreground" />
                   </Button>
                 </TableCell>
@@ -401,6 +422,19 @@ function UsersTab() {
             ))}
           </TableBody>
         </Table>
+        {delUser && (
+          <ConfirmDialog
+            open
+            onOpenChange={(v) => !v && setDelUser(null)}
+            title={`删除用户 ${delUser.username}？`}
+            description="该账号将立即退出并无法登录。"
+            onConfirm={async () => {
+              await fetch(`/api/admin/users/${delUser.id}`, { method: 'DELETE' })
+              setDelUser(null)
+              load()
+            }}
+          />
+        )}
       </CardContent>
     </Card>
   )
