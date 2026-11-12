@@ -128,3 +128,16 @@
     @apply font-sans;
     }
 }
+/* 三枚读数盒（jikasei 同款）：3 等分一行；窄卡按容器查询让位（字号降档、到期图标隐藏、日期放开折行） */
+[data-stats] {
+  container-type: inline-size;
+  container-name: stats;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@container stats (max-width: 349.99px) {
+  [data-stats] > [data-stat] { padding-left: 4px; padding-right: 4px; }
+  [data-stats] .tnum { font-size: 11px; }
+  [data-stats] [data-stat="expiry"] svg { display: none; }
+  [data-stats] .stat-wrap { white-space: normal; }
+  [data-stats] [data-stat-date] { font-size: 11px; padding-left: 0; white-space: normal; }
+}

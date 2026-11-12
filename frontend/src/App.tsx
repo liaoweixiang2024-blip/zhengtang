@@ -1,6 +1,6 @@
 // 路由：/ 仪表盘 | /server/{id} 详情 | /login 登录/向导 | /admin 管理 | /alerts 告警 | /public 公开页
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { GroupTabs, StatCards, ViewModeToggle, type ViewMode } from '@/components/dashboard-header'
+import { GroupTabs, StatCards, type ViewMode } from '@/components/dashboard-header'
 import { TopBar } from '@/components/top-bar'
 import { ServerCard, ServerCardMini } from '@/components/server-card'
 import { ServerTable } from '@/components/server-table'
@@ -151,6 +151,8 @@ function Main(props: {
 }) {
   const { siteName, path, navigate, me, view, changeView, group, setGroup, onLogout } = props
   const { servers, status } = useServers()
+  // 顶栏搜索（按名称过滤列表）
+  const [query, setQuery] = useState('')
   // 分组 id → 名称（真实组名来自 /api/groups；拉取失败回退"分组 N"）
   const [groupNames, setGroupNames] = useState<Map<number, string>>(new Map())
   useEffect(() => {
@@ -232,19 +234,24 @@ function Main(props: {
 
   // 仪表盘
   const filtered = group === 'all' ? list : list.filter((s) => s.group_id === group)
-  const sorted = [...filtered].sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
+  const q = query.trim().toLowerCase()
+  const searched = q ? filtered.filter((s) => s.name.toLowerCase().includes(q) || (s.region ?? '').toLowerCase().includes(q)) : filtered
+  const sorted = [...searched].sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
 
   return (
-    <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout}>
+    <Shell
+      siteName={siteName}
+      status={status}
+      me={me}
+      navigate={navigate}
+      onLogout={onLogout}
+      view={view}
+      changeView={changeView}
+      search={{ value: query, onChange: setQuery }}
+    >
       <div className="space-y-5">
         <StatCards servers={list} />
-        {/* 分组标签（jikasei 风格）+ 排版切换（同一行，切换靠右） */}
-        <div className="flex items-center gap-2">
-          {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
-          <span className="ml-auto shrink-0">
-            <ViewModeToggle value={view} onChange={changeView} />
-          </span>
-        </div>
+        {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
         {sorted.length === 0 ? (
           <div className="py-20 text-center text-muted-foreground">
             {list.length === 0 ? '还没有服务器，到「管理 → 服务器」添加一台' : '该分组暂无服务器'}
@@ -282,9 +289,10 @@ function Shell(props: {
   bare?: boolean
   view?: ViewMode
   changeView?: (v: ViewMode) => void
+  search?: { value: string; onChange: (v: string) => void }
   children: React.ReactNode
 }) {
-  const { siteName, status, me, navigate, onLogout, bare, view, changeView, children } = props
+  const { siteName, status, me, navigate, onLogout, bare, view, changeView, search, children } = props
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <TopBar
@@ -295,6 +303,7 @@ function Shell(props: {
         onLogout={onLogout}
         view={view}
         changeView={changeView}
+        search={search}
       />
       <main className={`mx-auto w-full max-w-[1280px] flex-1 px-4 sm:px-6 ${bare ? 'py-4' : 'py-6'}`}>{children}</main>
       {!bare && (

@@ -1,13 +1,12 @@
-// 服务器卡片：详细形态（默认）与简约形态
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import {
-  fmtBytes, fmtExpires, fmtPercent, fmtSpeed, fmtUptime, usageColor,
-} from '@/lib/format'
+// 服务器卡片（详细档对齐 jikasei NodeCard detailed 结构）：
+// 旗子+名字 / 在线·价格行 / 2×2 量表 / 三枚读数盒（速率·总量·到期）
+import { useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
+import { Card } from '@/components/ui/card'
 import { fmtCost } from '@/lib/cost'
+import { fmtBytes, fmtSpeed, fmtUptime } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { ArrowDown, ArrowDownUp, ArrowUp, CalendarClock, Cpu, HardDrive, MemoryStick } from 'lucide-react'
 
 function OnlineDot({ online }: { online: boolean }) {
   return (
@@ -20,157 +19,186 @@ function OnlineDot({ online }: { online: boolean }) {
   )
 }
 
-/** 到期徽章：文案带"到期"字样 + 悬停显示具体日期；临期渐红 */
-function ExpiresBadge({ expiresAt }: { expiresAt: number | null }) {
-  const { text, days } = fmtExpires(expiresAt)
-  if (days === null) return <Badge variant="outline" className="font-normal">长期</Badge>
-  const variant = days < 0 || days <= 7 ? 'destructive' : days <= 30 ? 'default' : 'secondary'
-  const date = new Date(expiresAt! * 1000).toISOString().slice(0, 10)
+/** 地区 emoji（🇭🇰）→ ISO 国家码（HK），供旗帜文件取图 */
+function regionCode(region: string | null): string {
+  if (!region) return ''
+  const cps = [...region].map((c) => c.codePointAt(0)!)
+  const ris = cps.filter((cp) => cp >= 0x1f1e6 && cp <= 0x1f1ff)
+  if (ris.length >= 2) {
+    return String.fromCodePoint(ris[0] - 0x1f1e6 + 65, ris[1] - 0x1f1e6 + 65)
+  }
+  return ''
+}
+
+/** 旗帜：24×18 圆角方形（jikasei 同款），无国家码/取不到时回退地区原文 */
+function Flag({ region }: { region: string | null }) {
+  const [missing, setMissing] = useState(false)
+  const code = regionCode(region)
+  if (!region) return null
+  if (!code || missing) {
+    return <span className="shrink-0 text-xs text-muted-foreground">{region}</span>
+  }
   return (
-    <Badge variant={variant} className="font-normal" title={`到期日 ${date}`}>
-      {text}
-    </Badge>
+    <img
+      src={`/flags/${code}.svg`}
+      alt={code}
+      title={region}
+      loading="lazy"
+      className="h-[18px] w-6 shrink-0 -translate-y-px rounded-[3px] object-cover ring-1 ring-border/70"
+      onError={() => setMissing(true)}
+    />
   )
 }
 
-/** 费用短标（有付费信息才显示；免费高亮为绿色） */
-function CostTag({ server }: { server: ServerView }) {
-  const cost = fmtCost(server)
-  if (!cost) return null
+/** 到期读数：剩余 N 天 / 已过期 N 天 / 今天到期 / 无期限 */
+function expiryDays(expiresAt: number | null): number | null {
+  if (!expiresAt) return null
+  return Math.floor((expiresAt * 1000 - Date.now()) / 86400000)
+}
+
+function expiryText(days: number | null): string {
+  if (days === null) return '无期限'
+  if (days < 0) return `已过期 ${-days} 天`
+  if (days === 0) return '今天到期'
+  return `剩余 ${days} 天`
+}
+
+/** 量表（jikasei Meter 同款：表名+百分比 / 前景色 70% 进度条 / 底注小字） */
+function Meter({ label, pct, foot, empty = '—', icon: Icon }: {
+  label: ReactNode
+  pct: number | null
+  foot: ReactNode
+  empty?: string
+  icon?: ComponentType<{ className?: string; style?: CSSProperties }>
+}) {
+  const valid = typeof pct === 'number' && Number.isFinite(pct)
+  const filled = valid ? Math.min(100, Math.max(0, pct)) : 0
   return (
-    <span className={cn('text-xs tabular-nums', server.pay_cycle_months === -1 ? 'text-emerald-500' : 'text-muted-foreground')}>
-      {cost}
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          {Icon && <Icon className="size-3 shrink-0" />}
+          <span className="truncate">{label}</span>
+        </span>
+        <span className="tnum text-xs font-medium">
+          {valid ? `${filled < 10 ? filled.toFixed(1) : filled.toFixed(0)}%` : empty}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-foreground/70 transition-[width] duration-500" style={{ width: `${filled}%` }} />
+      </div>
+      <div className="tnum mt-1.5 truncate text-xs text-muted-foreground">{foot}</div>
+    </div>
+  )
+}
+
+/** 读数盒（jikasei InfoBox：浅底小窗） */
+function InfoBox({ children, ...rest }: { children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div {...rest} className="min-w-0 space-y-1.5 overflow-hidden rounded-md bg-muted/60 px-2 py-2 text-xs">
+      {children}
+    </div>
+  )
+}
+
+function Stat({ icon: Icon, children, wrap }: {
+  icon: ComponentType<{ className?: string }>
+  children: ReactNode
+  wrap?: boolean
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <Icon className="size-3 shrink-0" />
+      <span className={wrap ? 'tnum truncate stat-wrap' : 'tnum truncate'}>{children}</span>
     </span>
   )
 }
 
-/** 详细形态：系统信息 + 四格读数 + 流量/磁盘条 + 到期 */
+/** 详细形态卡：旗子+名字 / 在线·价格 / CPU·内存·硬盘·流量 / 速率·总量·到期 */
 export function ServerCard({ server }: { server: ServerView }) {
   const m = server.metrics
   const si = server.system_info
-  const memPct = m && m.mem_total > 0 ? (m.mem_used / m.mem_total) * 100 : 0
-  const swapPct = m && m.swap_total > 0 ? (m.swap_used / m.swap_total) * 100 : 0
+  const cost = fmtCost(server)
+  const online = server.online
+  const upText = online ? (m ? `在线 ${fmtUptime(m.uptime_secs)}` : '在线') : m ? '离线' : '等待数据…'
+
   const root = m?.disks.find((d) => d.mount === '/') ?? m?.disks[0]
-  const diskPct = root && root.total > 0 ? (root.used / root.total) * 100 : 0
-  const netTotal = m ? m.net_in_total + m.net_out_total : 0
+  const diskPct = root && root.total > 0 ? (root.used / root.total) * 100 : null
+  const memPct = m && m.mem_total > 0 ? (m.mem_used / m.mem_total) * 100 : null
+  const quota = server.traffic_quota_bytes
+  const trafficPct = quota && quota > 0 ? Math.min((server.month_traffic / quota) * 100, 100) : null
+
+  const days = expiryDays(server.expires_at)
 
   return (
-    <Card className={cn('gap-3 py-4', !server.online && 'opacity-60')}>
-      <CardContent className={cn('px-4', server.online && m ? 'space-y-3' : 'flex flex-1 flex-col items-center justify-center gap-1.5 py-8')}>
-        {/* 头部两行：① 状态点+名称 | 到期徽章；② 系统信息 | 费用 */}
-        <div className="w-full space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <OnlineDot online={server.online} />
-              <span className="truncate font-medium">{server.name}</span>
-            </div>
-            <ExpiresBadge expiresAt={server.expires_at} />
+    <Card className={cn('min-w-0 gap-0 p-4 transition-colors hover:ring-foreground/25', !online && 'opacity-60')}>
+      {/* 身份行：旗子 + 名字（jikasei：在线与否写在元信息行，不再挂圆点） */}
+      <div className="flex min-w-0 items-center gap-2">
+        <Flag region={server.region} />
+        <h3 className="min-w-0 truncate font-medium">{server.name}</h3>
+      </div>
+
+      {/* 元信息行：左 在线时长 / 右 价格·周期 */}
+      <div data-meta="" className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          <OnlineDot online={online} />
+          {upText}
+        </span>
+        {cost && <span className="tnum shrink-0">{cost}</span>}
+      </div>
+
+      {/* 无数据/掉线：同一副骨架灰显（与在线卡等高），读数为 — */}
+      <>
+          {/* 2×2 量表 */}
+          <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4">
+            <Meter
+              icon={Cpu}
+              label={si ? `CPU ${si.cpu_cores} 核` : 'CPU'}
+              pct={m ? m.cpu_usage : null}
+              foot={m ? `${m.load1.toFixed(2)} ${m.load5.toFixed(2)} ${m.load15.toFixed(2)}` : '—'}
+            />
+            <Meter
+              icon={MemoryStick}
+              label="内存"
+              pct={memPct}
+              foot={m && m.mem_total > 0 ? `${fmtBytes(m.mem_used)} / ${fmtBytes(m.mem_total)}` : si ? fmtBytes(si.mem_total) : '—'}
+            />
+            <Meter
+              icon={HardDrive}
+              label="硬盘"
+              pct={diskPct}
+              foot={root ? `${fmtBytes(root.used)} / ${fmtBytes(root.total)}` : si ? fmtBytes(si.disk_total) : '—'}
+            />
+            <Meter
+              icon={ArrowDownUp}
+              label="流量"
+              pct={trafficPct}
+              empty="∞"
+              foot={quota && quota > 0 ? `${fmtBytes(server.month_traffic)} / ${fmtBytes(quota)}` : `${fmtBytes(server.month_traffic)} / 不限`}
+            />
           </div>
-          {(server.region || si || fmtCost(server)) && (
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="flex min-w-0 items-center gap-1.5">
-                {server.region && (
-                  <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 leading-none">{server.region}</span>
-                )}
-                {si && (
-                  <span className="min-w-0 truncate text-muted-foreground">
-                    {si.os} · {si.cpu_cores}C {fmtBytes(si.mem_total, 0)}
-                  </span>
-                )}
-              </span>
-              <CostTag server={server} />
-            </div>
-          )}
-        </div>
 
-        {server.online && m ? (
-          <>
-            {/* 四格读数 */}
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <div>
-                <div className={cn('text-sm font-semibold tabular-nums', usageColor(m.cpu_usage))}>
-                  {fmtPercent(m.cpu_usage, 0)}
-                </div>
-                <div className="text-[10px] text-muted-foreground">CPU</div>
-              </div>
-              <div>
-                <div className={cn('text-sm font-semibold tabular-nums', usageColor(memPct))}>
-                  {fmtPercent(memPct, 0)}
-                </div>
-                <div className="text-[10px] text-muted-foreground">内存</div>
-              </div>
-              <div>
-                <div className="text-sm font-semibold tabular-nums text-sky-500">
-                  ↓{fmtSpeed(m.net_in_speed)}
-                </div>
-                <div className="text-[10px] text-muted-foreground">下载</div>
-              </div>
-              <div>
-                <div className="text-sm font-semibold tabular-nums text-violet-500">
-                  ↑{fmtSpeed(m.net_out_speed)}
-                </div>
-                <div className="text-[10px] text-muted-foreground">上传</div>
-              </div>
-            </div>
-
-            {/* 内存/交换/磁盘进度条 */}
-            <div className="space-y-1.5">
-              <BarRow label="内存" pct={memPct} detail={`${fmtBytes(m.mem_used)} / ${fmtBytes(m.mem_total)}`} />
-              {m.swap_total > 0 && (
-                <BarRow label="交换" pct={swapPct} detail={`${fmtBytes(m.swap_used)} / ${fmtBytes(m.swap_total)}`} />
+          {/* 三枚读数盒：速率 / 总量 / 到期（jikasei [data-stats]，窄卡自动让位） */}
+          <div data-stats="" className="mt-4 grid gap-2">
+            <InfoBox data-stat="speed">
+              <Stat icon={ArrowDown}>{m ? fmtSpeed(m.net_in_speed) : '—'}</Stat>
+              <Stat icon={ArrowUp}>{m ? fmtSpeed(m.net_out_speed) : '—'}</Stat>
+            </InfoBox>
+            <InfoBox data-stat="total">
+              <Stat icon={ArrowDown}>{m ? fmtBytes(m.net_in_total) : '—'}</Stat>
+              <Stat icon={ArrowUp}>{m ? fmtBytes(m.net_out_total) : '—'}</Stat>
+            </InfoBox>
+            <InfoBox data-stat="expiry">
+              <Stat icon={CalendarClock} wrap>{expiryText(days).replace(/(\d) 天$/, '$1 天')}</Stat>
+              {server.expires_at && (
+                <span data-stat-date="" className="block truncate pl-[18px] text-muted-foreground">
+                  {new Date(server.expires_at * 1000).toISOString().slice(0, 10)}
+                </span>
               )}
-              {root && (
-                <BarRow
-                  label="磁盘"
-                  pct={diskPct}
-                  detail={`${fmtBytes(root.used)} / ${fmtBytes(root.total)}`}
-                />
-              )}
-              {(server.month_traffic > 0 || (server.traffic_quota_bytes ?? 0) > 0) && (
-                <BarRow
-                  label="月流量"
-                  pct={
-                    server.traffic_quota_bytes
-                      ? Math.min((server.month_traffic / server.traffic_quota_bytes) * 100, 100)
-                      : 0
-                  }
-                  detail={
-                    server.traffic_quota_bytes
-                      ? `${fmtBytes(server.month_traffic)} / ${fmtBytes(server.traffic_quota_bytes)}`
-                      : fmtBytes(server.month_traffic)
-                  }
-                />
-              )}
-            </div>
-
-            {/* 底行：在线时长 + 负载 + 总流量 */}
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{fmtUptime(m.uptime_secs)}</span>
-              <span>负载 {m.load1.toFixed(2)}</span>
-              <span>累计 {fmtBytes(netTotal)}</span>
-            </div>
-          </>
-        ) : (
-          <>
-            <span className="text-sm">{m ? '离线' : '等待数据…'}</span>
-            {m && <span className="text-xs text-muted-foreground">累计 {fmtBytes(m.net_in_total + m.net_out_total)}</span>}
-          </>
-        )}
-      </CardContent>
+            </InfoBox>
+          </div>
+      </>
     </Card>
-  )
-}
-
-function BarRow({ label, pct, detail }: { label: string; pct: number; detail: string }) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-10 shrink-0 text-muted-foreground">{label}</span>
-      <Progress
-        value={pct}
-        className={cn('h-1.5 flex-1', pct >= 90 && '[&>div]:bg-red-500', pct >= 70 && pct < 90 && '[&>div]:bg-amber-500')}
-      />
-      <span className="shrink-0 tabular-nums text-muted-foreground">{detail}</span>
-    </div>
   )
 }
 
@@ -179,34 +207,25 @@ export function ServerCardMini({ server }: { server: ServerView }) {
   const m = server.metrics
   const memPct = m && m.mem_total > 0 ? (m.mem_used / m.mem_total) * 100 : 0
   return (
-    <Card className={cn('gap-2 py-3', !server.online && 'opacity-60')}>
-      <CardContent className={cn('px-4', server.online && m ? 'space-y-2' : 'flex flex-1 flex-col items-center justify-center gap-1.5 py-4')}>
-        <div className="flex w-full items-center justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            <OnlineDot online={server.online} />
-            {server.region && <span className="shrink-0 leading-none" title={server.region}>{server.region.split(' ')[0]}</span>}
-            <span className="truncate text-sm font-medium">{server.name}</span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <CostTag server={server} />
-            <ExpiresBadge expiresAt={server.expires_at} />
-          </div>
+    <Card className={cn('min-w-0 gap-0 p-4', !server.online && 'opacity-60')}>
+      <div className="flex min-w-0 items-center gap-2">
+        <Flag region={server.region} />
+        <h3 className="min-w-0 truncate font-medium">{server.name}</h3>
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          {server.online ? (m ? fmtUptime(m.uptime_secs) : '在线') : '离线'}
+        </span>
+      </div>
+      {m ? (
+        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            CPU <span className="tnum font-medium text-foreground">{m.cpu_usage.toFixed(0)}%</span>
+            {'  '}内存 <span className="tnum font-medium text-foreground">{memPct.toFixed(0)}%</span>
+          </span>
+          <span className="tnum">↓{fmtSpeed(m.net_in_speed)} ↑{fmtSpeed(m.net_out_speed)}</span>
         </div>
-        {server.online && m ? (
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              CPU <span className={cn('font-semibold tabular-nums', usageColor(m.cpu_usage))}>{fmtPercent(m.cpu_usage, 0)}</span>
-              {'  '}内存 <span className={cn('font-semibold tabular-nums', usageColor(memPct))}>{fmtPercent(memPct, 0)}</span>
-            </span>
-            <span className="tabular-nums">↓{fmtSpeed(m.net_in_speed)} ↑{fmtSpeed(m.net_out_speed)}</span>
-          </div>
-        ) : (
-          <>
-            <span className="text-xs">{m ? '离线' : '等待数据…'}</span>
-            {m && <span className="text-[10px] text-muted-foreground">累计 {fmtBytes(m.net_in_total + m.net_out_total)}</span>}
-          </>
-        )}
-      </CardContent>
+      ) : (
+        <p className="mt-3 text-xs text-muted-foreground">等待数据…</p>
+      )}
     </Card>
   )
 }
