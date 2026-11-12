@@ -8,7 +8,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { fmtBytes } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
-import { ArrowLeft, Activity } from 'lucide-react'
+import { ArrowLeft, Activity, ListTree } from 'lucide-react'
 
 interface DialRow {
   task_id: number
@@ -184,6 +184,31 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
                   <span className="text-xs text-muted-foreground">
                     最近 20 次 · 失败 {fails}
                   </span>
+                </div>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 进程监控 */}
+      {m && m.processes.length > 0 && (
+        <Card className="py-4">
+          <CardHeader className="pb-0">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <ListTree className="size-4" /> 进程（共 {m.process_count}）
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 px-4 pt-2 text-sm">
+            {m.processes.map((p) => {
+              return (
+                <div key={p.rule_id} className="flex items-center gap-3 border-b py-1.5 last:border-0">
+                  <span className="font-mono text-xs text-muted-foreground">#{p.rule_id}</span>
+                  <Badge variant={p.count > 0 ? 'secondary' : 'destructive'} className="font-mono text-xs">
+                    {p.count} 实例
+                  </Badge>
+                  <span className="tabular-nums">{p.cpu.toFixed(1)}% CPU</span>
+                  <span className="tabular-nums text-muted-foreground">{fmtBytes(p.mem_bytes)}</span>
                 </div>
               )
             })}

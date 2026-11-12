@@ -250,6 +250,34 @@ impl AppState {
             let _ = tx.send(ServerMsg::DialTasks(self.dial_tasks(server_id)));
         }
     }
+
+    /// 某台服务器的进程监控规则（转 proto 下发）。
+    pub fn process_rules(&self, server_id: &str) -> Vec<proto::ProcessRule> {
+        self.store
+            .with(|c| {
+                let mut stmt = c.prepare(
+                    "SELECT id, name, exact FROM process_rules WHERE server_id = ?1",
+                )?;
+                let rows = stmt
+                    .query_map([server_id], |r| {
+                        Ok(proto::ProcessRule {
+                            id: r.get(0)?,
+                            name: r.get(1)?,
+                            exact: r.get::<_, i64>(2)? != 0,
+                        })
+                    })?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                Ok(rows)
+            })
+            .unwrap_or_default()
+    }
+
+    /// 推送进程规则全集。
+    pub fn push_process_rules(&self, server_id: &str) {
+        if let Some(tx) = self.agent_cmds.get(server_id) {
+            let _ = tx.send(ServerMsg::ProcessRules(self.process_rules(server_id)));
+        }
+    }
 }
 
 use proto::ServerMsg;

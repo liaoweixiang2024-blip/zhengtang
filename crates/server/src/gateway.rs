@@ -81,6 +81,7 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
     if send_proto(&mut socket, &ServerMsg::DialTasks(tasks)).await.is_err() {
         tracing::debug!(agent = %agent_id, "初始拨测任务发送失败（连接即将关闭）");
     }
+    let _ = send_proto(&mut socket, &ServerMsg::ProcessRules(state.process_rules(&agent_id))).await;
 
     // 4. 消息循环（persist 用 interval：跨 select 保持计时，不受消息频率影响）
     let mut persist_ticker = tokio::time::interval(Duration::from_secs(60));

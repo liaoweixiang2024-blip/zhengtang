@@ -44,6 +44,9 @@ pub fn router() -> Router<Arc<AppState>> {
         // 拨测任务
         .route("/api/admin/servers/{id}/dial-tasks", get(list_dial_tasks).post(add_dial_task))
         .route("/api/admin/dial-tasks/{task_id}", delete(delete_dial_task))
+        // 进程监控规则
+        .route("/api/admin/servers/{id}/process-rules", get(list_process_rules).post(add_process_rule))
+        .route("/api/admin/process-rules/{rule_id}", delete(delete_process_rule))
         // 拨测结果（详情页，登录用户）
         .route("/api/servers/{id}/dial-results", get(dial_results))
 }
@@ -892,4 +895,92 @@ async fn dial_results(
         })
         .unwrap_or_default();
     Json(json!({ "results": results })).into_response()
+}
+
+
+// ---------- 进程监控 ----------
+
+async fn list_process_rules(State(state): State<Arc<AppState>>, jar: CookieJar, Path(id): Path<String>) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let rules = state
+        .store
+        .with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT id, name, exact, COALESCE(display_name, name) FROM process_rules WHERE server_id = ?1 ORDER BY id",
+            )?;
+            let rows = stmt
+                .query_map([&id], |r| {
+                    Ok(json!({
+                        "id": r.get::<_, i64>(0)?,
+                        "name": r.get::<_, String>(1)?,
+                        "exact": r.get::<_, i64>(2)? != 0,
+                        "display_name": r.get::<_, String>(3)?,
+                    }))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .unwrap_or_default();
+    Json(json!({ "rules": rules })).into_response()
+}
+
+#[derive(Deserialize)]
+struct AddProcessRuleBody {
+    name: String,
+    #[serde(default = "default_true")]
+    exact: bool,
+    display_name: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+async fn add_process_rule(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+    Json(body): Json<AddProcessRuleBody>,
+) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    if body.name.trim().is_empty() || body.name.len() > 64 {
+        return err(StatusCode::BAD_REQUEST, "进程名 1-64 字符");
+    }
+    let _ = state.store.with(|c| {
+        c.execute(
+            "INSERT INTO process_rules (server_id, name, exact, display_name) VALUES (?1,?2,?3,?4)",
+            rusqlite::params![id, body.name.trim(), body.exact as i64, body.display_name],
+        )?;
+        Ok(())
+    });
+    state.push_process_rules(&id);
+    Json(json!({ "ok": true })).into_response()
+}
+
+async fn delete_process_rule(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Path(rule_id): Path<i64>,
+) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let sid: Option<String> = state
+        .store
+        .with(|c| {
+            Ok(c.query_row("SELECT server_id FROM process_rules WHERE id = ?1", [rule_id], |r| r.get(0)).ok())
+        })
+        .unwrap_or(None);
+    let _ = state.store.with(|c| {
+        c.execute("DELETE FROM process_rules WHERE id = ?1", [rule_id])?;
+        Ok(())
+    });
+    if let Some(sid) = sid {
+        state.push_process_rules(&sid);
+    }
+    Json(json!({ "ok": true })).into_response()
 }

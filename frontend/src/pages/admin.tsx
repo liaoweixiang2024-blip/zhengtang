@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fmtBytes } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
-import { Plus, Radar, Trash2 } from 'lucide-react'
+import { ListTree, Plus, Radar, Trash2 } from 'lucide-react'
 
 interface Group { id: number; name: string }
 interface User { id: number; username: string; role: string; totp_enabled: boolean }
@@ -43,6 +43,7 @@ function ServersTab() {
   const [addOpen, setAddOpen] = useState(false)
   const [installCmd, setInstallCmd] = useState<string | null>(null)
   const [dialServer, setDialServer] = useState<ServerView | null>(null)
+  const [procServer, setProcServer] = useState<ServerView | null>(null)
 
   const load = useCallback(() => {
     fetch('/api/admin/servers').then((r) => r.json()).then((d) => setServers(d.servers ?? []))
@@ -82,6 +83,7 @@ function ServersTab() {
         <CardTitle className="text-base">服务器（{servers.length}）</CardTitle>
         <AddServerDialog open={addOpen} onOpenChange={setAddOpen} onAdd={add} installCmd={installCmd} onCopy={() => setInstallCmd(null)} />
         {dialServer && <DialDialog server={dialServer} onClose={() => setDialServer(null)} />}
+        {procServer && <ProcDialog server={procServer} onClose={() => setProcServer(null)} />}
       </CardHeader>
       <CardContent>
         <Table>
@@ -93,6 +95,7 @@ function ServersTab() {
               <TableHead className="hidden sm:table-cell">流量配额</TableHead>
               <TableHead>公开展示</TableHead>
               <TableHead className="w-10">拨测</TableHead>
+              <TableHead className="w-10">进程</TableHead>
               <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
@@ -129,6 +132,11 @@ function ServersTab() {
                 <TableCell>
                   <Button variant="ghost" size="icon" title="拨测任务" onClick={() => setDialServer(s)}>
                     <Radar className="size-4 text-muted-foreground" />
+                  </Button>
+                </TableCell>
+                <TableCell>
+                  <Button variant="ghost" size="icon" title="进程监控" onClick={() => setProcServer(s)}>
+                    <ListTree className="size-4 text-muted-foreground" />
                   </Button>
                 </TableCell>
                 <TableCell>
@@ -470,6 +478,73 @@ function DialDialog({ server, onClose }: { server: ServerView; onClose: () => vo
             <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder={kind === 'http' ? 'https://example.com' : 'example.com:443'} className="col-span-3 font-mono text-xs" />
             <Input value={interval} onChange={(e) => setInterval(e.target.value)} type="number" min={10} title="间隔秒" className="col-span-1" />
             <Button type="submit" className="col-span-5" size="sm"><Plus className="size-4" /> 添加任务</Button>
+          </form>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+
+// ---------- 进程监控规则 ----------
+
+interface ProcRuleRow { id: number; name: string; exact: boolean; display_name: string }
+
+function ProcDialog({ server, onClose }: { server: ServerView; onClose: () => void }) {
+  const [rules, setRules] = useState<ProcRuleRow[]>([])
+  const [name, setName] = useState('')
+  const [exact, setExact] = useState(true)
+  const [error, setError] = useState('')
+
+  const load = useCallback(() => {
+    fetch(`/api/admin/servers/${server.id}/process-rules`).then((r) => r.json()).then((d) => setRules(d.rules ?? []))
+  }, [server.id])
+  useEffect(load, [load])
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (!name.trim()) return
+    const res = await fetch(`/api/admin/servers/${server.id}/process-rules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), exact }),
+    })
+    if (!res.ok) {
+      setError((await res.json()).error ?? '添加失败')
+      return
+    }
+    setName('')
+    load()
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>进程监控 · {server.name}</DialogTitle>
+          <DialogDescription>按进程名匹配并统计实例数 / CPU / 内存（只读，无控制语义）</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          {rules.map((r) => (
+            <div key={r.id} className="flex items-center gap-2 border-b pb-1.5 text-sm last:border-0">
+              <span className="min-w-0 flex-1 truncate font-mono text-xs">{r.name}</span>
+              <Badge variant="outline" className="text-xs">{r.exact ? '精确' : '包含'}</Badge>
+              <Button variant="ghost" size="icon" onClick={async () => {
+                await fetch(`/api/admin/process-rules/${r.id}`, { method: 'DELETE' })
+                load()
+              }}>
+                <Trash2 className="size-4 text-muted-foreground" />
+              </Button>
+            </div>
+          ))}
+          <form onSubmit={add} className="flex gap-2">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="进程名，如 nginx" className="font-mono text-xs" />
+            <Button variant={exact ? 'default' : 'outline'} size="sm" type="button" onClick={() => setExact(!exact)}>
+              {exact ? '精确' : '包含'}
+            </Button>
+            <Button type="submit" size="sm"><Plus className="size-4" /></Button>
           </form>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
