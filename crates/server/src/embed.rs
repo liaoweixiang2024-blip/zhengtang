@@ -19,7 +19,12 @@ pub async fn static_handler(uri: Uri) -> Response {
 
     match Assets::get(path) {
         Some(file) => serve_file(path, file.data),
-        // SPA fallback：非 /api、/ws 路径一律回 index.html（前端路由）
+        // 带 hash 的静态资源缺失 = 客户端缓存错位，返回真 404 让浏览器重新拉 index
+        // （fallback 成 HTML 会被当 JS 解析导致白屏）
+        None if path.starts_with("assets/") => {
+            (StatusCode::NOT_FOUND, "asset not found (硬刷新页面)").into_response()
+        }
+        // SPA fallback：其余非 /api、/ws 路径回 index.html（前端路由）
         None => match Assets::get("index.html") {
             Some(index) => Html(index.data)
                 .into_response()
