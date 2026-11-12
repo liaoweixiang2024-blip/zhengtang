@@ -214,7 +214,7 @@ function StatCard({
   )
 }
 
-/** 分组标签行：全部 + 各组（组名目前由后端 group_id 提供，M4 管理页可命名） */
+/** 分组标签行：全部 + 各组（jikasei 风格：朴素小按钮，激活=浅底、未激活=ghost，横向滚动） */
 export function GroupTabs({
   groups, active, onChange,
 }: {
@@ -224,20 +224,21 @@ export function GroupTabs({
 }) {
   const tabs = [{ id: 'all' as const, name: '全部', count: groups.reduce((a, g) => a + g.count, 0) }, ...groups]
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div role="group" aria-label="分组" className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1 pb-1">
       {tabs.map((t) => (
         <button
           key={String(t.id)}
+          aria-pressed={active === t.id}
           onClick={() => onChange(t.id)}
           className={cn(
-            'rounded-full border px-3 py-1 text-xs transition-colors',
+            'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm outline-none transition-colors',
             active === t.id
-              ? 'border-primary bg-primary text-primary-foreground'
+              ? 'bg-secondary text-secondary-foreground'
               : 'text-muted-foreground hover:bg-accent hover:text-foreground',
           )}
         >
           {t.name}
-          <span className="ml-1 opacity-70">{t.count}</span>
+          <span className="tabular-nums text-muted-foreground">{t.count}</span>
         </button>
       ))}
     </div>

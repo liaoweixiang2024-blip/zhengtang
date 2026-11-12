@@ -25,7 +25,7 @@ export function TopBar(props: {
   const { siteName, status, me, showLogin = true, navigate, onLogout, view, changeView } = props
   return (
     <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
+      <div className="mx-auto flex w-full max-w-[1280px] items-center justify-between gap-2 px-4 py-3 sm:px-6">
         {status ? (
           <button className="flex items-center gap-2" onClick={() => navigate('/')}>
             <span className="text-lg font-semibold tracking-tight">{siteName}</span>

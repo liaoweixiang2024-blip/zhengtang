@@ -238,10 +238,10 @@ function Main(props: {
     <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout}>
       <div className="space-y-5">
         <StatCards servers={list} />
-        {/* 分组标签 + 排版切换（同一行，切换靠右） */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* 分组标签（jikasei 风格）+ 排版切换（同一行，切换靠右） */}
+        <div className="flex items-center gap-2">
           {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
-          <span className="ml-auto">
+          <span className="ml-auto shrink-0">
             <ViewModeToggle value={view} onChange={changeView} />
           </span>
         </div>
@@ -296,7 +296,7 @@ function Shell(props: {
         view={view}
         changeView={changeView}
       />
-      <main className={`mx-auto w-full max-w-6xl flex-1 px-4 ${bare ? 'py-4' : 'py-6'}`}>{children}</main>
+      <main className={`mx-auto w-full max-w-[1280px] flex-1 px-4 sm:px-6 ${bare ? 'py-4' : 'py-6'}`}>{children}</main>
       {!bare && (
         <footer className="mt-auto pb-6 pt-2 text-center text-xs text-muted-foreground">
           zhengtang · 严格只读探针

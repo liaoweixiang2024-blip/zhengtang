@@ -26,7 +26,7 @@ export function PublicPage() {
   }, [])
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-6">
+    <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6">
       <p className="mb-4 text-xs text-muted-foreground">公开状态页 · 5s 自动刷新</p>
       {servers.length === 0 ? (
         <div className="py-20 text-center text-muted-foreground">暂无公开展示的服务器</div>
