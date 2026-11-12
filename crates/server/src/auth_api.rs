@@ -346,7 +346,7 @@ struct UpdateServerBody {
     purchased_at: Option<Option<i64>>,
     /// 1-28；None=自然月
     traffic_reset_day: Option<Option<i64>>,
-    /// 付费周期月数：1/3/12/36/60
+    /// 付费周期月数：1/3/12/36/60；0=一次性；-1=免费
     pay_cycle_months: Option<Option<i64>>,
     /// 每期费用（≥0）
     price_per_cycle: Option<Option<f64>>,
@@ -356,8 +356,8 @@ struct UpdateServerBody {
     traffic_quota_bytes: Option<Option<i64>>,
 }
 
-/// 付费周期与货币的合法值
-const PAY_CYCLE_MONTHS: [i64; 5] = [1, 3, 12, 36, 60];
+/// 付费周期与货币的合法值（0=一次性、-1=免费）
+const PAY_CYCLE_MONTHS: [i64; 7] = [1, 3, 12, 36, 60, 0, -1];
 const CURRENCIES: [&str; 6] = ["CNY", "USD", "EUR", "JPY", "HKD", "GBP"];
 
 async fn update_server(
@@ -406,10 +406,14 @@ async fn update_server(
         if let Some(m) = body.pay_cycle_months {
             if let Some(v) = m {
                 if !PAY_CYCLE_MONTHS.contains(&v) {
-                    anyhow::bail!("付费周期必须是 1/3/12/36/60 月");
+                    anyhow::bail!("付费周期必须是 1/3/12/36/60 月、一次性或免费");
                 }
             }
             c.execute("UPDATE servers SET pay_cycle_months = ?1 WHERE id = ?2", rusqlite::params![m, id])?;
+            // 免费 = 无费用无货币（覆盖旧值，避免残留 $99/免费 的矛盾数据）
+            if m == Some(-1) {
+                c.execute("UPDATE servers SET price_per_cycle = NULL, currency = NULL WHERE id = ?1", [&id])?;
+            }
         }
         if let Some(p) = body.price_per_cycle {
             if let Some(v) = p {

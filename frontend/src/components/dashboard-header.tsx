@@ -1,9 +1,11 @@
 // 概览统计卡片行 + 分组标签 + 形态切换（参考 JIKASEI 主题交互）
+import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { fmtBytes } from '@/lib/format'
+import { fmtBytes, fmtSpeed } from '@/lib/format'
+import { CURRENCY_SYMBOL, monthlyCostByCurrency, remainingValueByCurrency } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Check, Grid2x2, LayoutGrid, Rows3 } from 'lucide-react'
@@ -16,28 +18,92 @@ const VIEW_LABEL: Record<ViewMode, string> = {
   mini: '简约',
 }
 
-/** 概览卡片：总数 / 在线 / 离线 / 累计流量 */
+/** 概览卡：节点 / 月度预算 / 剩余价值 / 最忙节点 / 今日流量 / 总流量 / 实时网速 */
 export function StatCards({ servers }: { servers: ServerView[] }) {
+  // 今日流量（本地 0 点起，30s 轮询）
+  const [today, setToday] = useState<{ in: number; out: number } | null>(null)
+  useEffect(() => {
+    const load = () => {
+      const since = Math.floor(new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000)
+      fetch(`/api/traffic/summary?since=${since}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setToday({ in: d.in ?? 0, out: d.out ?? 0 }))
+        .catch(() => {})
+    }
+    load()
+    const t = setInterval(load, 30_000)
+    return () => clearInterval(t)
+  }, [])
+
   const total = servers.length
   const online = servers.filter((s) => s.online).length
   const offline = total - online
-  const netTotal = servers.reduce(
-    (acc, s) => acc + (s.metrics ? s.metrics.net_in_total + s.metrics.net_out_total : 0),
-    0,
-  )
+
+  // 月度预算 / 剩余价值（取合计最大的货币为主货币）
+  const budgets = monthlyCostByCurrency(servers)
+  const budget = budgets.sort((a, b) => b.monthly - a.monthly)[0]
+  const values = remainingValueByCurrency(servers)
+  const remain = values.find((v) => v.currency === budget?.currency) ?? values.sort((a, b) => b.value - a.value)[0]
+  const billed = servers.filter((s) => s.price_per_cycle != null && s.pay_cycle_months && s.pay_cycle_months > 0).length
+  const unexpired = servers.filter((s) => s.expires_at && s.expires_at > Date.now() / 1000).length
+
+  // 最忙节点 = 在线机器中 CPU 最高
+  const busiest = servers
+    .filter((s) => s.online && s.metrics)
+    .sort((a, b) => (b.metrics!.cpu_usage ?? 0) - (a.metrics!.cpu_usage ?? 0))[0]
+
+  const sum = (f: (m: NonNullable<ServerView['metrics']>) => number) =>
+    servers.reduce((acc, s) => acc + (s.metrics ? f(s.metrics) : 0), 0)
+  const totalIn = sum((m) => m.net_in_total)
+  const totalOut = sum((m) => m.net_out_total)
+  const speedIn = sum((m) => m.net_in_speed)
+  const speedOut = sum((m) => m.net_out_speed)
+
+  const sym = budget ? CURRENCY_SYMBOL[budget.currency] ?? budget.currency : ''
+
   const items = [
-    { label: '服务器', value: String(total) },
-    { label: '在线', value: String(online), cls: 'text-emerald-500' },
-    { label: '离线', value: String(offline), cls: offline > 0 ? 'text-red-500' : undefined },
-    { label: '累计流量', value: fmtBytes(netTotal) },
+    {
+      label: '节点',
+      value: `${online}/${total}`,
+      sub: offline > 0 ? `${offline} 台离线` : '全部在线',
+      valueCls: offline > 0 ? 'text-amber-500' : 'text-emerald-500',
+    },
+    budget
+      ? {
+          label: '月度预算',
+          value: `≈${sym}${budget.monthly.toFixed(2)}`,
+          sub: `${billed} 台计费`,
+        }
+      : { label: '月度预算', value: '—', sub: '暂无计费信息' },
+    remain && remain.value > 0
+      ? {
+          label: '剩余价值',
+          value: `≈${CURRENCY_SYMBOL[remain.currency] ?? remain.currency}${remain.value.toFixed(2)}`,
+          sub: `${unexpired} 台未到期`,
+        }
+      : { label: '剩余价值', value: '—', sub: '暂无到期机器' },
+    busiest && busiest.metrics
+      ? {
+          label: '最忙节点',
+          value: `${busiest.metrics.cpu_usage.toFixed(1)}%`,
+          sub: busiest.name,
+        }
+      : { label: '最忙节点', value: '—', sub: '暂无在线节点' },
+    { label: '今日流量', value: fmtBytes(today?.in ?? 0), sub: `↑ ${fmtBytes(today?.out ?? 0)}` },
+    { label: '总流量', value: fmtBytes(totalIn), sub: `↑ ${fmtBytes(totalOut)}` },
+    { label: '实时网速', value: `↓ ${fmtSpeed(speedIn)}`, sub: `↑ ${fmtSpeed(speedOut)}` },
   ]
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
       {items.map((it) => (
         <Card key={it.label} className="py-3">
-          <CardContent className="px-4">
-            <div className={cn('text-xl font-semibold tabular-nums', it.cls)}>{it.value}</div>
+          <CardContent className="space-y-1 px-4">
             <div className="text-xs text-muted-foreground">{it.label}</div>
+            <div className={cn('truncate text-lg font-semibold tabular-nums', (it as { valueCls?: string }).valueCls)} title={it.value}>
+              {it.value}
+            </div>
+            <div className="truncate text-xs text-muted-foreground" title={it.sub}>{it.sub}</div>
           </CardContent>
         </Card>
       ))}

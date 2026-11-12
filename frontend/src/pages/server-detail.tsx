@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { fmtBytes } from '@/lib/format'
-import { CURRENCY_SYMBOL, fmtCost } from '@/pages/admin'
+import { fmtBytes, fmtExpires } from '@/lib/format'
+import { CURRENCY_SYMBOL, fmtCost } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { ArrowLeft, Activity, ListTree } from 'lucide-react'
 
@@ -138,6 +138,11 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
             <InfoItem label="CPU" value={`${si.cpu_model} (${si.cpu_cores} 核)`} />
             <InfoItem label="内存" value={fmtBytes(si.mem_total)} />
             <InfoItem label="磁盘" value={fmtBytes(si.disk_total)} />
+            <InfoItem label="到期时间" value={
+              server.expires_at
+                ? `${new Date(server.expires_at * 1000).toISOString().slice(0, 10)}（${fmtExpires(server.expires_at).text}）`
+                : '长期'
+            } />
             <InfoItem label="购买时间" value={server.purchased_at ? new Date(server.purchased_at * 1000).toISOString().slice(0, 10) : '—'} />
             <InfoItem
               label="流量账期"
@@ -147,9 +152,13 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
             <InfoItem
               label="费用"
               value={
-                server.price_per_cycle != null && server.pay_cycle_months
-                  ? `${fmtCost(server)}（月均 ${CURRENCY_SYMBOL[server.currency ?? 'CNY'] ?? ''}${(server.price_per_cycle / server.pay_cycle_months).toFixed(1)}）`
-                  : '—'
+                server.pay_cycle_months === -1
+                  ? '免费'
+                  : server.pay_cycle_months === 0
+                    ? fmtCost(server)
+                    : server.price_per_cycle != null && server.pay_cycle_months
+                      ? `${fmtCost(server)}（月均 ${CURRENCY_SYMBOL[server.currency ?? 'CNY'] ?? ''}${(server.price_per_cycle / server.pay_cycle_months).toFixed(1)}）`
+                      : '—'
               }
             />
           </CardContent>

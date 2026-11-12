@@ -30,15 +30,15 @@ export function fmtPercent(v: number, digits = 1): string {
   return `${v.toFixed(digits)}%`
 }
 
-/** 到期剩余描述：已过期 / N 天 / N 月 / N 年 */
+/** 到期剩余描述：已过期 / 今天到期 / N 天后到期 / N 个月后到期 / N 年后到期 */
 export function fmtExpires(expiresAt: number | null): { text: string; days: number | null } {
   if (!expiresAt) return { text: '长期', days: null }
   const days = Math.floor((expiresAt * 1000 - Date.now()) / 86400000)
   if (days < 0) return { text: `已过期 ${-days} 天`, days }
   if (days === 0) return { text: '今天到期', days }
-  if (days < 60) return { text: `${days} 天`, days }
-  if (days < 730) return { text: `${(days / 30).toFixed(0)} 个月`, days }
-  return { text: `${(days / 365).toFixed(1)} 年`, days }
+  if (days < 60) return { text: `${days} 天后到期`, days }
+  if (days < 730) return { text: `${(days / 30).toFixed(0)} 个月后到期`, days }
+  return { text: `${(days / 365).toFixed(1)} 年后到期`, days }
 }
 
 /** 用量颜色：绿 → 黄 → 红 */

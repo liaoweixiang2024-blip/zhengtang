@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes } from '@/lib/format'
+import { CYCLE_LABEL, CURRENCY_SYMBOL, fmtCost, monthlyCostByCurrency } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { Bell, ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2 } from 'lucide-react'
 
@@ -188,28 +189,7 @@ function dateStr(ts: number): string {
   return new Date(ts * 1000).toISOString().slice(0, 10)
 }
 
-// ---------- 费用展示 ----------
-
-export const CYCLE_LABEL: Record<number, string> = { 1: '月付', 3: '季付', 12: '年付', 36: '3年付', 60: '5年付' }
-export const CURRENCY_SYMBOL: Record<string, string> = { CNY: '¥', USD: '$', EUR: '€', JPY: 'JP¥', HKD: 'HK$', GBP: '£' }
-
-export function fmtCost(s: { price_per_cycle: number | null; pay_cycle_months: number | null; currency: string | null }): string {
-  if (s.price_per_cycle == null || !s.pay_cycle_months) return '—'
-  const sym = CURRENCY_SYMBOL[s.currency ?? 'CNY'] ?? ''
-  const price = String(s.price_per_cycle).replace(/\.0+$/, '')
-  return `${sym}${price}/${CYCLE_LABEL[s.pay_cycle_months] ?? `${s.pay_cycle_months}个月`}`
-}
-
-/// 各货币月均合计（管理页统计行用）
-export function monthlyCostByCurrency(servers: ServerView[]): { currency: string; monthly: number }[] {
-  const map = new Map<string, number>()
-  for (const s of servers) {
-    if (s.price_per_cycle == null || !s.pay_cycle_months) continue
-    const cur = s.currency ?? 'CNY'
-    map.set(cur, (map.get(cur) ?? 0) + s.price_per_cycle / s.pay_cycle_months)
-  }
-  return [...map.entries()].map(([currency, monthly]) => ({ currency, monthly }))
-}
+// ---------- 费用展示（实现在 lib/cost.ts） ----------
 
 function fmtExpiresCell(ts: number | null): string {
   if (!ts) return '长期'
@@ -738,8 +718,8 @@ function EditServerDialog({
       traffic_quota_bytes: quotaBytes,
       traffic_reset_day: resetDay === 'natural' ? null : Number(resetDay),
       pay_cycle_months: payCycle === 'none' ? null : Number(payCycle),
-      price_per_cycle: payCycle === 'none' ? null : priceVal,
-      currency: payCycle === 'none' ? null : currency,
+      price_per_cycle: payCycle === 'none' || payCycle === '-1' ? null : priceVal,
+      currency: payCycle === 'none' || payCycle === '-1' ? null : currency,
       public_visible: publicVisible,
     }
     const res = await fetch(`/api/admin/servers/${server.id}`, {
@@ -822,10 +802,10 @@ function EditServerDialog({
                   inputMode="decimal"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  placeholder="留空=不计"
-                  disabled={payCycle === 'none'}
+                  placeholder={payCycle === '-1' ? '免费' : '留空=不计'}
+                  disabled={payCycle === 'none' || payCycle === '-1'}
                 />
-                <Select value={currency} onValueChange={setCurrency} disabled={payCycle === 'none'}>
+                <Select value={currency} onValueChange={setCurrency} disabled={payCycle === 'none' || payCycle === '-1'}>
                   <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.keys(CURRENCY_SYMBOL).map((c) => (

@@ -17,6 +17,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/status", get(status))
         .route("/api/servers", get(servers))
         .route("/api/servers/{id}/history", get(history))
+        // 概览统计：指定时间起的流量合计（前端传本地今日 0 点）
+        .route("/api/traffic/summary", get(traffic_summary))
         // 公开展示页（匿名，仅 public_visible 的脱敏子集）
         .route("/api/public/servers", get(public_servers))
 }
@@ -149,6 +151,58 @@ fn current_month() -> String {
     let days = ts / 86400;
     let (y, m) = crate::jobs::year_month_from_days(days);
     format!("{y:04}-{m:02}")
+}
+
+#[derive(Deserialize)]
+struct SummaryQuery {
+    /// 起始 unix 秒（默认最近 24h；上限回看 35 天 = 1min 行保留期）
+    since: Option<i64>,
+}
+
+/// 流量合计：对当前用户可见的服务器，按 since 起 1min 粒度样本求和（今日流量用）。
+async fn traffic_summary(
+    State(state): State<Arc<AppState>>,
+    jar: axum_extra::extract::CookieJar,
+    Query(q): Query<SummaryQuery>,
+) -> impl IntoResponse {
+    let Some(user) = crate::auth::current_user(&state, &jar) else {
+        return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "未登录" }))).into_response();
+    };
+    let now = crate::store::unix_now();
+    let since = q.since.unwrap_or(now - 86400).clamp(now - 35 * 86400, now);
+
+    let ids: Vec<String> = state
+        .server_views()
+        .into_iter()
+        .filter(|v| server_visible_to(&user, v.group_id))
+        .map(|v| v.id)
+        .collect();
+    if ids.is_empty() {
+        return (StatusCode::OK, Json(json!({ "in": 0, "out": 0 }))).into_response();
+    }
+
+    // 每机一次索引查询求和（机器数量级下开销可忽略，避免拼动态 IN 占位符）
+    let (bytes_in, bytes_out): (i64, i64) = state
+        .store
+        .with(|c| {
+            let mut bin = 0i64;
+            let mut bout = 0i64;
+            for id in &ids {
+                let (i, o): (i64, i64) = c
+                    .query_row(
+                        "SELECT COALESCE(SUM(net_in), 0), COALESCE(SUM(net_out), 0)
+                         FROM metric_samples WHERE granularity = 1 AND ts >= ?1 AND server_id = ?2",
+                        rusqlite::params![since, id],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .unwrap_or((0, 0));
+                bin += i;
+                bout += o;
+            }
+            Ok((bin, bout))
+        })
+        .unwrap_or((0, 0));
+    (StatusCode::OK, Json(json!({ "in": bytes_in, "out": bytes_out }))).into_response()
 }
 
 

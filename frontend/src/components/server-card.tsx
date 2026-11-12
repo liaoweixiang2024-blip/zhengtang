@@ -5,6 +5,7 @@ import { Progress } from '@/components/ui/progress'
 import {
   fmtBytes, fmtExpires, fmtPercent, fmtSpeed, fmtUptime, usageColor,
 } from '@/lib/format'
+import { fmtCost } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -19,12 +20,28 @@ function OnlineDot({ online }: { online: boolean }) {
   )
 }
 
-/** 到期徽章颜色：临期渐红 */
+/** 到期徽章：文案带"到期"字样 + 悬停显示具体日期；临期渐红 */
 function ExpiresBadge({ expiresAt }: { expiresAt: number | null }) {
   const { text, days } = fmtExpires(expiresAt)
   if (days === null) return <Badge variant="outline" className="font-normal">长期</Badge>
   const variant = days < 0 || days <= 7 ? 'destructive' : days <= 30 ? 'default' : 'secondary'
-  return <Badge variant={variant} className="font-normal">{text}</Badge>
+  const date = new Date(expiresAt! * 1000).toISOString().slice(0, 10)
+  return (
+    <Badge variant={variant} className="font-normal" title={`到期日 ${date}`}>
+      {text}
+    </Badge>
+  )
+}
+
+/** 费用短标（有付费信息才显示；免费高亮为绿色） */
+function CostTag({ server }: { server: ServerView }) {
+  const cost = fmtCost(server)
+  if (!cost) return null
+  return (
+    <span className={cn('text-xs tabular-nums', server.pay_cycle_months === -1 ? 'text-emerald-500' : 'text-muted-foreground')}>
+      {cost}
+    </span>
+  )
 }
 
 /** 详细形态：系统信息 + 四格读数 + 流量/磁盘条 + 到期 */
@@ -51,7 +68,10 @@ export function ServerCard({ server }: { server: ServerView }) {
               </span>
             )}
           </div>
-          <ExpiresBadge expiresAt={server.expires_at} />
+          <div className="flex shrink-0 items-center gap-2">
+            <CostTag server={server} />
+            <ExpiresBadge expiresAt={server.expires_at} />
+          </div>
         </div>
 
         {server.online && m ? (
@@ -149,7 +169,10 @@ export function ServerCardMini({ server }: { server: ServerView }) {
             <OnlineDot online={server.online} />
             <span className="truncate text-sm font-medium">{server.name}</span>
           </div>
-          <ExpiresBadge expiresAt={server.expires_at} />
+          <div className="flex shrink-0 items-center gap-2">
+            <CostTag server={server} />
+            <ExpiresBadge expiresAt={server.expires_at} />
+          </div>
         </div>
         {server.online && m ? (
           <div className="flex items-center justify-between text-xs text-muted-foreground">
