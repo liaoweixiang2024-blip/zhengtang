@@ -1,4 +1,4 @@
-// 路由：#/ 仪表盘 | #/server/{id} 详情 | #/login 登录/向导 | #/admin 管理
+// 路由：/ 仪表盘 | /server/{id} 详情 | /login 登录/向导 | /admin 管理 | /alerts 告警 | /public 公开页
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GroupTabs, StatCards, ViewModeToggle, type ViewMode } from '@/components/dashboard-header'
 import { ServerCard, ServerCardMini } from '@/components/server-card'
@@ -15,22 +15,26 @@ import { Bell, LogOut, Settings } from 'lucide-react'
 
 const VIEW_KEY = 'zt-view-mode'
 
-function useHashRoute(): [string, (h: string) => void] {
-  const [hash, setHash] = useState(() => location.hash || '#/')
+/// History 路由：pathname + pushState（URL 干净：/admin、/server/xxx）。
+/// 服务端对非 /api /ws 路径一律 fallback 到 SPA，刷新/直开/分享均可。
+function usePathRoute(): [string, (to: string) => void] {
+  const [path, setPath] = useState(() => location.pathname || '/')
   useEffect(() => {
-    const on = () => setHash(location.hash || '#/')
-    addEventListener('hashchange', on)
-    return () => removeEventListener('hashchange', on)
+    const on = () => setPath(location.pathname || '/')
+    addEventListener('popstate', on)
+    return () => removeEventListener('popstate', on)
   }, [])
-  return [hash, (h) => {
-    location.hash = h
-  }]
+  const navigate = (to: string) => {
+    history.pushState(null, '', to)
+    setPath(to)
+  }
+  return [path, navigate]
 }
 
 interface Me { username: string; role: string; group_ids: number[] }
 
 export default function App() {
-  const [hash, navigate] = useHashRoute()
+  const [path, navigate] = usePathRoute()
   const [me, setMe] = useState<Me | null | undefined>(undefined) // undefined=加载中
   const [setupNeeded, setSetupNeeded] = useState(false)
   const [view, setView] = useState<ViewMode>(
@@ -58,11 +62,11 @@ export default function App() {
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
     setMe(null)
-    navigate('#/login')
+    navigate('/login')
   }
 
   // 公开展示页：匿名可访问（在登录判断之前）
-  if (hash === '#/public') {
+  if (path === '/public') {
     return <PublicPage />
   }
 
@@ -73,11 +77,11 @@ export default function App() {
 
   // 未登录 / 首启向导
   if (!me) {
-    return <Login setupNeeded={setupNeeded} onDone={() => { loadMe(); navigate('#/') }} />
+    return <Login setupNeeded={setupNeeded} onDone={() => { loadMe(); navigate('/') }} />
   }
 
   return <Main
-    hash={hash}
+    path={path}
     navigate={navigate}
     me={me}
     view={view}
@@ -89,7 +93,7 @@ export default function App() {
 }
 
 function Main(props: {
-  hash: string
+  path: string
   navigate: (h: string) => void
   me: Me
   view: ViewMode
@@ -98,13 +102,13 @@ function Main(props: {
   setGroup: (g: number | 'all') => void
   onLogout: () => void
 }) {
-  const { hash, navigate, me, view, changeView, group, setGroup, onLogout } = props
+  const { path, navigate, me, view, changeView, group, setGroup, onLogout } = props
   const { servers, status } = useServers()
 
   const list = useMemo(() => [...servers.values()], [servers])
 
   // 告警中心（所有登录用户）
-  if (hash === '#/alerts') {
+  if (path === '/alerts') {
     return (
       <Shell status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         <Alerts isAdmin={me.role === 'admin'} />
@@ -113,7 +117,7 @@ function Main(props: {
   }
 
   // 管理页
-  if (hash === '#/admin') {
+  if (path === '/admin') {
     if (me.role !== 'admin') {
       return <div className="py-20 text-center text-muted-foreground">需要管理员权限</div>
     }
@@ -125,13 +129,13 @@ function Main(props: {
   }
 
   // 详情页
-  const detailId = hash.startsWith('#/server/') ? hash.slice('#/server/'.length) : null
+  const detailId = path.startsWith('/server/') ? path.slice('/server/'.length) : null
   const detailServer = detailId ? servers.get(detailId) : null
   if (detailId) {
     return (
       <Shell status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         {detailServer ? (
-          <ServerDetail server={detailServer} onBack={() => navigate('#/')} />
+          <ServerDetail server={detailServer} onBack={() => navigate('/')} />
         ) : (
           <div className="py-20 text-center text-muted-foreground">加载中…</div>
         )}
@@ -159,7 +163,7 @@ function Main(props: {
             {list.length === 0 ? '还没有服务器，到「管理 → 服务器」添加一台' : '该分组暂无服务器'}
           </div>
         ) : view === 'compact' ? (
-          <ServerTable servers={sorted} onOpen={(id) => navigate(`#/server/${id}`)} />
+          <ServerTable servers={sorted} onOpen={(id) => navigate(`/server/${id}`)} />
         ) : view === 'mini' ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {sorted.map((s) => (
@@ -197,7 +201,7 @@ function Shell(props: {
     <div className="min-h-svh bg-background text-foreground">
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <button className="flex items-center gap-2" onClick={() => navigate('#/')}>
+          <button className="flex items-center gap-2" onClick={() => navigate('/')}>
             <span className="text-lg font-semibold tracking-tight">zhengtang</span>
             <span
               className={cn(
@@ -212,14 +216,14 @@ function Shell(props: {
             <button
               className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"
               title="告警中心"
-              onClick={() => navigate('#/alerts')}
+              onClick={() => navigate('/alerts')}
             >
               <Bell className="size-4" />
             </button>
             {me.role === 'admin' && (
               <button
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                onClick={() => navigate('#/admin')}
+                onClick={() => navigate('/admin')}
               >
                 <Settings className="size-4" />
                 管理
