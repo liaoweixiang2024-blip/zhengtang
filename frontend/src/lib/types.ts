@@ -70,6 +70,7 @@ export interface ServerView {
   pay_cycle_months: number | null
   price_per_cycle: number | null
   currency: string | null
+  region: string | null
   public_visible: boolean
   system_info: SystemInfo | null
   metrics: RealtimeMetrics | null

@@ -50,6 +50,35 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/admin/process-rules/{rule_id}", delete(delete_process_rule))
         // 拨测结果（详情页，登录用户）
         .route("/api/servers/{id}/dial-results", get(dial_results))
+        // 分组名（仪表盘分组标签用，登录用户；viewer 只见其授权组）
+        .route("/api/groups", get(my_groups))
+}
+
+/// 登录用户可见的分组（admin 全量；viewer 按授权过滤）
+async fn my_groups(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
+    let Some(user) = crate::auth::current_user(&state, &jar) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "未登录" })),
+        )
+            .into_response();
+    };
+    let groups = state
+        .store
+        .with(|c| {
+            let mut stmt = c.prepare("SELECT id, name FROM groups ORDER BY id")?;
+            let rows = stmt
+                .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .unwrap_or_default();
+    let visible: Vec<_> = groups
+        .into_iter()
+        .filter(|(id, _)| user.role == "admin" || user.group_ids.contains(id))
+        .map(|(id, name)| json!({ "id": id, "name": name }))
+        .collect();
+    Json(json!({ "groups": visible })).into_response()
 }
 
 fn err(status: StatusCode, msg: &str) -> axum::response::Response {
@@ -338,21 +367,43 @@ async fn add_server(
     .into_response()
 }
 
+/// 双层 Option：区分「字段缺失」(None=不改) 与 「JSON null」(Some(None)=清空)。
+/// serde 默认把 null 也读成 None，导致所有"清空"操作静默失效。
+fn double_option<'de, T, D>(de: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: serde::Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    // null → Some(None)（清空）；有值 → Some(Some(v))（更新）
+    Option::<T>::deserialize(de).map(Some)
+}
+
 #[derive(Deserialize)]
 struct UpdateServerBody {
     name: Option<String>,
+    #[serde(default, deserialize_with = "double_option")]
     group_id: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "double_option")]
     expires_at: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "double_option")]
     purchased_at: Option<Option<i64>>,
     /// 1-28；None=自然月
+    #[serde(default, deserialize_with = "double_option")]
     traffic_reset_day: Option<Option<i64>>,
     /// 付费周期月数：1/3/12/36/60；0=一次性；-1=免费
+    #[serde(default, deserialize_with = "double_option")]
     pay_cycle_months: Option<Option<i64>>,
     /// 每期费用（≥0）
+    #[serde(default, deserialize_with = "double_option")]
     price_per_cycle: Option<Option<f64>>,
     /// CNY/USD/EUR/JPY/HKD/GBP
+    #[serde(default, deserialize_with = "double_option")]
     currency: Option<Option<String>>,
+    /// 地区徽章（如 '🇭🇰 香港'，≤24 字符）
+    #[serde(default, deserialize_with = "double_option")]
+    region: Option<Option<String>>,
     public_visible: Option<bool>,
+    #[serde(default, deserialize_with = "double_option")]
     traffic_quota_bytes: Option<Option<i64>>,
 }
 
@@ -431,10 +482,26 @@ async fn update_server(
             }
             c.execute("UPDATE servers SET currency = ?1 WHERE id = ?2", rusqlite::params![cur, id])?;
         }
+        if let Some(region) = &body.region {
+            if let Some(v) = region {
+                if v.chars().count() > 24 {
+                    anyhow::bail!("地区徽章过长（≤24 字符）");
+                }
+            }
+            c.execute("UPDATE servers SET region = ?1 WHERE id = ?2", rusqlite::params![region, id])?;
+        }
         Ok(())
     });
     match result {
-        Ok(()) => Json(json!({ "ok": true })).into_response(),
+        Ok(()) => {
+            // 已连接的仪表盘即时刷新（否则要等重连拿新快照）
+            if let Some(v) = state.server_view(&id) {
+                let _ = state
+                    .dash_tx
+                    .send(crate::state::DashboardEvent::Update { server: v });
+            }
+            Json(json!({ "ok": true })).into_response()
+        }
         Err(e) => err(StatusCode::BAD_REQUEST, &e.to_string()),
     }
 }

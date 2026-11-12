@@ -151,14 +151,25 @@ function Main(props: {
 }) {
   const { siteName, path, navigate, me, view, changeView, group, setGroup, onLogout } = props
   const { servers, status } = useServers()
+  // 分组 id → 名称（真实组名来自 /api/groups；拉取失败回退"分组 N"）
+  const [groupNames, setGroupNames] = useState<Map<number, string>>(new Map())
+  useEffect(() => {
+    fetch('/api/groups')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.groups) return
+        setGroupNames(new Map(d.groups.map((g: { id: number; name: string }) => [g.id, g.name])))
+      })
+      .catch(() => {})
+  }, [])
 
   const list = useMemo(() => [...servers.values()], [servers])
   // ⚠ 全部 hooks 必须在任何条件 return 之前（否则路由切换时 hook 数变化 → React 崩溃）
   const groups = useMemo(() => {
     const map = new Map<number, number>()
     for (const s of list) if (s.group_id != null) map.set(s.group_id, (map.get(s.group_id) ?? 0) + 1)
-    return [...map.entries()].map(([id, count]) => ({ id, name: `分组 ${id}`, count }))
-  }, [list])
+    return [...map.entries()].map(([id, count]) => ({ id, name: groupNames.get(id) ?? `分组 ${id}`, count }))
+  }, [list, groupNames])
 
   // 告警中心（独立路由，观察者从这里进；管理员的入口在后台侧边栏）
   if (path === '/alerts') {
@@ -268,7 +279,7 @@ function Shell(props: {
 }) {
   const { siteName, status, me, navigate, onLogout, bare, view, changeView, children } = props
   return (
-    <div className="min-h-svh bg-background text-foreground">
+    <div className="flex min-h-svh flex-col bg-background text-foreground">
       <TopBar
         siteName={siteName}
         status={status}
@@ -278,9 +289,9 @@ function Shell(props: {
         view={view}
         changeView={changeView}
       />
-      <main className={`mx-auto max-w-6xl px-4 ${bare ? 'py-4' : 'py-6'}`}>{children}</main>
+      <main className={`mx-auto w-full max-w-6xl flex-1 px-4 ${bare ? 'py-4' : 'py-6'}`}>{children}</main>
       {!bare && (
-        <footer className="pb-8 text-center text-xs text-muted-foreground">
+        <footer className="mt-auto pb-6 pt-2 text-center text-xs text-muted-foreground">
           zhengtang · 严格只读探针
         </footer>
       )}

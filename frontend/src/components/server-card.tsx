@@ -56,22 +56,31 @@ export function ServerCard({ server }: { server: ServerView }) {
 
   return (
     <Card className={cn('gap-3 py-4', !server.online && 'opacity-60')}>
-      <CardContent className="px-4 space-y-3">
-        {/* 标题行：名称 + 系统 + 在线点 + 到期 */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <OnlineDot online={server.online} />
-            <span className="truncate font-medium">{server.name}</span>
-            {si && (
-              <span className="hidden truncate text-xs text-muted-foreground sm:inline">
-                {si.os} · {si.cpu_cores}C {fmtBytes(si.mem_total, 0)}
-              </span>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <CostTag server={server} />
+      <CardContent className={cn('px-4', server.online && m ? 'space-y-3' : 'flex flex-1 flex-col items-center justify-center gap-1.5 py-8')}>
+        {/* 头部两行：① 状态点+名称 | 到期徽章；② 系统信息 | 费用 */}
+        <div className="w-full space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <OnlineDot online={server.online} />
+              <span className="truncate font-medium">{server.name}</span>
+            </div>
             <ExpiresBadge expiresAt={server.expires_at} />
           </div>
+          {(server.region || si || fmtCost(server)) && (
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="flex min-w-0 items-center gap-1.5">
+                {server.region && (
+                  <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 leading-none">{server.region}</span>
+                )}
+                {si && (
+                  <span className="min-w-0 truncate text-muted-foreground">
+                    {si.os} · {si.cpu_cores}C {fmtBytes(si.mem_total, 0)}
+                  </span>
+                )}
+              </span>
+              <CostTag server={server} />
+            </div>
+          )}
         </div>
 
         {server.online && m ? (
@@ -134,10 +143,10 @@ export function ServerCard({ server }: { server: ServerView }) {
             </div>
           </>
         ) : (
-          <div className="py-4 text-center text-sm text-muted-foreground">
-            {m ? '离线' : '等待数据…'}
-            {m && <span className="ml-2 text-xs">累计 {fmtBytes(m.net_in_total + m.net_out_total)}</span>}
-          </div>
+          <>
+            <span className="text-sm">{m ? '离线' : '等待数据…'}</span>
+            {m && <span className="text-xs text-muted-foreground">累计 {fmtBytes(m.net_in_total + m.net_out_total)}</span>}
+          </>
         )}
       </CardContent>
     </Card>
@@ -163,10 +172,11 @@ export function ServerCardMini({ server }: { server: ServerView }) {
   const memPct = m && m.mem_total > 0 ? (m.mem_used / m.mem_total) * 100 : 0
   return (
     <Card className={cn('gap-2 py-3', !server.online && 'opacity-60')}>
-      <CardContent className="space-y-2 px-4">
-        <div className="flex items-center justify-between">
+      <CardContent className={cn('px-4', server.online && m ? 'space-y-2' : 'flex flex-1 flex-col items-center justify-center gap-1.5 py-4')}>
+        <div className="flex w-full items-center justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <OnlineDot online={server.online} />
+            {server.region && <span className="shrink-0 leading-none" title={server.region}>{server.region.split(' ')[0]}</span>}
             <span className="truncate text-sm font-medium">{server.name}</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -183,7 +193,10 @@ export function ServerCardMini({ server }: { server: ServerView }) {
             <span className="tabular-nums">↓{fmtSpeed(m.net_in_speed)} ↑{fmtSpeed(m.net_out_speed)}</span>
           </div>
         ) : (
-          <div className="text-xs text-muted-foreground">离线</div>
+          <>
+            <span className="text-xs">{m ? '离线' : '等待数据…'}</span>
+            {m && <span className="text-[10px] text-muted-foreground">累计 {fmtBytes(m.net_in_total + m.net_out_total)}</span>}
+          </>
         )}
       </CardContent>
     </Card>

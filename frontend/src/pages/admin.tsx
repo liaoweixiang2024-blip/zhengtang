@@ -590,6 +590,13 @@ function ProcDialog({ server, onClose }: { server: ServerView; onClose: () => vo
 
 // ---------- 站点设置 ----------
 
+// 常用地区（国旗 emoji + 名称，存整串作为徽章）
+export const REGIONS = [
+  '🇨🇳 中国大陆', '🇭🇰 香港', '🇹🇼 台湾', '🇯🇵 日本', '🇰🇷 韩国', '🇸🇬 新加坡',
+  '🇲🇾 马来西亚', '🇹🇭 泰国', '🇺🇸 美国', '🇨🇦 加拿大', '🇬🇧 英国', '🇩🇪 德国',
+  '🇫🇷 法国', '🇳🇱 荷兰', '🇦🇺 澳大利亚', '🇮🇳 印度', '🇹🇷 土耳其', '🇷🇺 俄罗斯', '🇧🇷 巴西',
+]
+
 function SettingsTab() {
   const [siteName, setSiteName] = useState('')
   const [description, setDescription] = useState('')
@@ -686,9 +693,10 @@ function EditServerDialog({
   const [purchased, setPurchased] = useState(server.purchased_at ? dateStr(server.purchased_at) : '')
   const [quota, setQuota] = useState(server.traffic_quota_bytes ? String(server.traffic_quota_bytes / GB) : '')
   const [resetDay, setResetDay] = useState(server.traffic_reset_day ? String(server.traffic_reset_day) : 'natural')
-  const [payCycle, setPayCycle] = useState(server.pay_cycle_months ? String(server.pay_cycle_months) : 'none')
+  const [payCycle, setPayCycle] = useState(server.pay_cycle_months != null ? String(server.pay_cycle_months) : 'none')
   const [price, setPrice] = useState(server.price_per_cycle != null ? String(server.price_per_cycle) : '')
   const [currency, setCurrency] = useState(server.currency ?? 'CNY')
+  const [region, setRegion] = useState(server.region ?? 'none')
   const [publicVisible, setPublicVisible] = useState(server.public_visible)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -720,6 +728,7 @@ function EditServerDialog({
       pay_cycle_months: payCycle === 'none' ? null : Number(payCycle),
       price_per_cycle: payCycle === 'none' || payCycle === '-1' ? null : priceVal,
       currency: payCycle === 'none' || payCycle === '-1' ? null : currency,
+      region: region === 'none' ? null : region,
       public_visible: publicVisible,
     }
     const res = await fetch(`/api/admin/servers/${server.id}`, {
@@ -760,7 +769,28 @@ function EditServerDialog({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>到期日</Label>
+              <Label>地区</Label>
+              <Select value={region} onValueChange={setRegion}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">未设置</SelectItem>
+                  {REGIONS.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>到期日</Label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  onClick={() => setExpires('')}
+                >
+                  {expires ? '设为长期' : '长期有效 ✓'}
+                </button>
+              </div>
               <Input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
             </div>
             <div className="space-y-1.5">

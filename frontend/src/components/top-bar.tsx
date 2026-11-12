@@ -106,10 +106,8 @@ function UserMenu({
         <UserRound className="size-[18px]" />
       </button>
       {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-50 mt-1.5 min-w-44 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
-        >
+        <div role="menu" className="absolute right-0 top-full z-50 min-w-44 pt-1.5">
+          <div className="rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
           {!admin && (
             <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); navigate('/alerts') }}>
               <Bell className="size-4" />
@@ -139,6 +137,7 @@ function UserMenu({
             <LogOut className="size-4" />
             退出登录
           </button>
+          </div>
         </div>
       )}
     </div>

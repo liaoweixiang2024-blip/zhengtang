@@ -160,6 +160,7 @@ struct SummaryQuery {
 }
 
 /// 流量合计：对当前用户可见的服务器，按 since 起 1min 粒度样本求和（今日流量用）。
+/// 返回总量 + 每机明细（概览卡悬停列表）。
 async fn traffic_summary(
     State(state): State<Arc<AppState>>,
     jar: axum_extra::extract::CookieJar,
@@ -171,23 +172,22 @@ async fn traffic_summary(
     let now = crate::store::unix_now();
     let since = q.since.unwrap_or(now - 86400).clamp(now - 35 * 86400, now);
 
-    let ids: Vec<String> = state
+    let visible: Vec<(String, String)> = state
         .server_views()
         .into_iter()
         .filter(|v| server_visible_to(&user, v.group_id))
-        .map(|v| v.id)
+        .map(|v| (v.id, v.name))
         .collect();
-    if ids.is_empty() {
-        return (StatusCode::OK, Json(json!({ "in": 0, "out": 0 }))).into_response();
+    if visible.is_empty() {
+        return (StatusCode::OK, Json(json!({ "in": 0, "out": 0, "per_server": [] }))).into_response();
     }
 
     // 每机一次索引查询求和（机器数量级下开销可忽略，避免拼动态 IN 占位符）
-    let (bytes_in, bytes_out): (i64, i64) = state
+    let rows = state
         .store
         .with(|c| {
-            let mut bin = 0i64;
-            let mut bout = 0i64;
-            for id in &ids {
+            let mut rows: Vec<(String, i64, i64)> = Vec::new();
+            for (id, name) in &visible {
                 let (i, o): (i64, i64) = c
                     .query_row(
                         "SELECT COALESCE(SUM(net_in), 0), COALESCE(SUM(net_out), 0)
@@ -196,13 +196,20 @@ async fn traffic_summary(
                         |r| Ok((r.get(0)?, r.get(1)?)),
                     )
                     .unwrap_or((0, 0));
-                bin += i;
-                bout += o;
+                rows.push((name.clone(), i, o));
             }
-            Ok((bin, bout))
+            rows.sort_by(|a, b| (b.1 + b.2).cmp(&(a.1 + a.2)));
+            Ok(rows)
         })
-        .unwrap_or((0, 0));
-    (StatusCode::OK, Json(json!({ "in": bytes_in, "out": bytes_out }))).into_response()
+        .unwrap_or_default();
+    let bytes_in: i64 = rows.iter().map(|r| r.1).sum();
+    let bytes_out: i64 = rows.iter().map(|r| r.2).sum();
+    let per_server: Vec<_> = rows
+        .into_iter()
+        .take(12)
+        .map(|(name, i, o)| json!({ "name": name, "in": i, "out": o }))
+        .collect();
+    (StatusCode::OK, Json(json!({ "in": bytes_in, "out": bytes_out, "per_server": per_server }))).into_response()
 }
 
 
