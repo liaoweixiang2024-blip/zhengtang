@@ -346,9 +346,19 @@ struct UpdateServerBody {
     purchased_at: Option<Option<i64>>,
     /// 1-28；None=自然月
     traffic_reset_day: Option<Option<i64>>,
+    /// 付费周期月数：1/3/12/36/60
+    pay_cycle_months: Option<Option<i64>>,
+    /// 每期费用（≥0）
+    price_per_cycle: Option<Option<f64>>,
+    /// CNY/USD/EUR/JPY/HKD/GBP
+    currency: Option<Option<String>>,
     public_visible: Option<bool>,
     traffic_quota_bytes: Option<Option<i64>>,
 }
+
+/// 付费周期与货币的合法值
+const PAY_CYCLE_MONTHS: [i64; 5] = [1, 3, 12, 36, 60];
+const CURRENCIES: [&str; 6] = ["CNY", "USD", "EUR", "JPY", "HKD", "GBP"];
 
 async fn update_server(
     State(state): State<Arc<AppState>>,
@@ -392,6 +402,30 @@ async fn update_server(
         if let Some(q) = body.traffic_quota_bytes {
             let v: Option<i64> = q;
             c.execute("UPDATE servers SET traffic_quota_bytes = ?1 WHERE id = ?2", rusqlite::params![v, id])?;
+        }
+        if let Some(m) = body.pay_cycle_months {
+            if let Some(v) = m {
+                if !PAY_CYCLE_MONTHS.contains(&v) {
+                    anyhow::bail!("付费周期必须是 1/3/12/36/60 月");
+                }
+            }
+            c.execute("UPDATE servers SET pay_cycle_months = ?1 WHERE id = ?2", rusqlite::params![m, id])?;
+        }
+        if let Some(p) = body.price_per_cycle {
+            if let Some(v) = p {
+                if !v.is_finite() || v < 0.0 {
+                    anyhow::bail!("费用必须是不小于 0 的数字");
+                }
+            }
+            c.execute("UPDATE servers SET price_per_cycle = ?1 WHERE id = ?2", rusqlite::params![p, id])?;
+        }
+        if let Some(cur) = &body.currency {
+            if let Some(v) = cur {
+                if !CURRENCIES.contains(&v.as_str()) {
+                    anyhow::bail!("货币必须是 CNY/USD/EUR/JPY/HKD/GBP");
+                }
+            }
+            c.execute("UPDATE servers SET currency = ?1 WHERE id = ?2", rusqlite::params![cur, id])?;
         }
         Ok(())
     });

@@ -61,18 +61,8 @@ impl Collector {
         };
         self.last_net = Some((in_total, out_total, std::time::Instant::now()));
 
-        // ---- 磁盘 ----
-        self.disks.refresh(false);
-        let disks: Vec<DiskUsage> = self
-            .disks
-            .iter()
-            .map(|d| DiskUsage {
-                mount: d.mount_point().to_string_lossy().into_owned(),
-                fs: d.file_system().to_string_lossy().into_owned(),
-                total: d.total_space(),
-                used: d.total_space().saturating_sub(d.available_space()),
-            })
-            .collect();
+        // ---- 磁盘（过滤伪文件系统；macOS APFS 只保留 / 一条容器口径） ----
+        let disks = self.disk_list();
 
         // ---- GPU（sysinfo 内建，无 GPU/不可读则空） ----
         let gpus: Vec<GpuInfo> = self
@@ -144,11 +134,51 @@ impl Collector {
         }
     }
 
+    /// 真实磁盘列表（过滤伪文件系统与容器重复卷）。
+    ///
+    /// - 排除：devfs/map 等伪挂载、tmpfs/squashfs/overlay 等内存或只读镜像 fs
+    /// - macOS：APFS 各卷（/System/Volumes/Data、Preboot、VM…）共享同一容器，
+    ///   available 都是容器口径，逐卷展示会出现"每个卷都占 150G"的假象 →
+    ///   只保留挂载点 "/"，其 used = 容器真实占用（total - available）
+    fn disk_list(&mut self) -> Vec<DiskUsage> {
+        const VIRTUAL_FS: &[&str] = &[
+            "devfs", "devtmpfs", "tmpfs", "squashfs", "erofs", "overlay", "iso9660",
+            "procfs", "autofs", "fusefs", "msdosfs", "vfat", "cd9660", "nullfs",
+        ];
+        self.disks.refresh(false);
+        self.disks
+            .iter()
+            .filter(|d| {
+                let mount = d.mount_point().to_string_lossy();
+                let fs = d.file_system().to_string_lossy();
+                if d.total_space() == 0 {
+                    return false;
+                }
+                if mount.starts_with("/dev") || mount.starts_with("map ") {
+                    return false;
+                }
+                if VIRTUAL_FS.contains(&fs.as_ref()) {
+                    return false;
+                }
+                // macOS 系统卷/数据卷与 / 同容器，只保留 /
+                if cfg!(target_os = "macos") && mount.starts_with("/System/Volumes/") {
+                    return false;
+                }
+                true
+            })
+            .map(|d| DiskUsage {
+                mount: d.mount_point().to_string_lossy().into_owned(),
+                fs: d.file_system().to_string_lossy().into_owned(),
+                total: d.total_space(),
+                used: d.total_space().saturating_sub(d.available_space()),
+            })
+            .collect()
+    }
+
     /// 低频完整报告。
     pub fn full_report(&mut self) -> SystemInfo {
         self.sys.refresh_memory();
-        self.disks.refresh(false);
-        let disks_total: u64 = self.disks.iter().map(|d| d.total_space()).sum();
+        let disks_total: u64 = self.disk_list().iter().map(|d| d.total).sum();
 
         SystemInfo {
             hostname: System::host_name().unwrap_or_else(|_| "unknown".into()),

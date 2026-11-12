@@ -1,37 +1,36 @@
 // 路由：/ 仪表盘 | /server/{id} 详情 | /login 登录/向导 | /admin 管理 | /alerts 告警 | /public 公开页
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { GroupTabs, StatCards, ViewModeToggle, type ViewMode } from '@/components/dashboard-header'
+import { GroupTabs, StatCards, type ViewMode } from '@/components/dashboard-header'
+import { TopBar } from '@/components/top-bar'
 import { ServerCard, ServerCardMini } from '@/components/server-card'
 import { ServerTable } from '@/components/server-table'
-import { ThemeToggle } from '@/components/theme-toggle'
 import { Login } from '@/pages/login'
-import { Admin } from '@/pages/admin'
+import { Admin, parseAdminTab } from '@/pages/admin'
 import { Alerts } from '@/pages/alerts'
 import { PublicPage } from '@/pages/public'
 import { ServerDetail } from '@/pages/server-detail'
 import { useServers } from '@/hooks/useServers'
-import { cn } from '@/lib/utils'
-import { Bell, LogOut, Settings } from 'lucide-react'
+import type { Me } from '@/lib/types'
 
 const VIEW_KEY = 'zt-view-mode'
 
 /// History 路由：pathname + pushState（URL 干净：/admin、/server/xxx）。
 /// 服务端对非 /api /ws 路径一律 fallback 到 SPA，刷新/直开/分享均可。
-function usePathRoute(): [string, (to: string) => void] {
-  const [path, setPath] = useState(() => location.pathname || '/')
+function usePathRoute(): [string, (to: string, replace?: boolean) => void] {
+  const [path, setPath] = useState(() => location.pathname + location.search || '/')
   useEffect(() => {
-    const on = () => setPath(location.pathname || '/')
+    const on = () => setPath(location.pathname + location.search || '/')
     addEventListener('popstate', on)
     return () => removeEventListener('popstate', on)
   }, [])
-  const navigate = (to: string) => {
-    history.pushState(null, '', to)
+  const navigate = (to: string, replace = false) => {
+    if (replace) history.replaceState(null, '', to)
+    else history.pushState(null, '', to)
     setPath(to)
   }
   return [path, navigate]
 }
 
-interface Me { username: string; role: string; group_ids: number[] }
 interface Site { site_name: string; site_description: string; public_page_enabled: boolean }
 
 export default function App() {
@@ -86,26 +85,43 @@ export default function App() {
 
   // 公开展示页：匿名可访问（在登录判断之前）；总开关关闭时提示
   if (path === '/public') {
-    return site.public_page_enabled ? <PublicPage siteName={site.site_name} /> : (
+    return site.public_page_enabled ? (
+      <div className="min-h-svh bg-background text-foreground">
+        <TopBar siteName={site.site_name} me={me ?? null} navigate={navigate} onLogout={logout} />
+        <PublicPage />
+      </div>
+    ) : (
       <div className="flex min-h-svh items-center justify-center text-muted-foreground">公开页未开放</div>
     )
   }
 
   // 加载中
-  if (me === undefined || setupNeeded === undefined) {
+  if (me === undefined) {
     return <div className="flex min-h-svh items-center justify-center text-muted-foreground">加载中…</div>
   }
 
-  // 未登录 / 首启向导
+  // 未登录 / 首启向导：同样带顶栏（界面调节 + 登录按钮）
   if (!me) {
     return (
-      <Login
-        setupNeeded={setupNeeded}
-        onDone={() => {
-          loadMe()
-          navigate(path && path !== '/login' ? path : '/')
-        }}
-      />
+      <div className="flex min-h-svh flex-col bg-background text-foreground">
+        <TopBar
+          siteName={site.site_name}
+          me={null}
+          showLogin={path !== '/login'}
+          navigate={navigate}
+          onLogout={logout}
+        />
+        <div className="flex flex-1 items-center justify-center p-4">
+          <Login
+            setupNeeded={setupNeeded}
+            siteName={site.site_name}
+            onDone={() => {
+              loadMe()
+              navigate(path && path !== '/login' ? path : '/')
+            }}
+          />
+        </div>
+      </div>
     )
   }
 
@@ -125,7 +141,7 @@ export default function App() {
 function Main(props: {
   siteName: string
   path: string
-  navigate: (h: string) => void
+  navigate: (h: string, replace?: boolean) => void
   me: Me
   view: ViewMode
   changeView: (v: ViewMode) => void
@@ -144,7 +160,7 @@ function Main(props: {
     return [...map.entries()].map(([id, count]) => ({ id, name: `分组 ${id}`, count }))
   }, [list])
 
-  // 告警中心（所有登录用户）
+  // 告警中心（独立路由，观察者从这里进；管理员的入口在后台侧边栏）
   if (path === '/alerts') {
     return (
       <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
@@ -153,14 +169,21 @@ function Main(props: {
     )
   }
 
-  // 管理页
-  if (path === '/admin') {
+  // 管理页（?tab= 深链由顶栏用户菜单使用）
+  if (path === '/admin' || path.startsWith('/admin')) {
     if (me.role !== 'admin') {
-      return <div className="py-20 text-center text-muted-foreground">需要管理员权限</div>
+      return (
+        <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+          <div className="py-20 text-center text-muted-foreground">需要管理员权限</div>
+        </Shell>
+      )
     }
     return (
       <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
-        <Admin />
+        <Admin
+          tab={parseAdminTab(path.split('?')[1] ?? '')}
+          onTabChange={(k) => navigate(`/admin?tab=${k}`, true)}
+        />
       </Shell>
     )
   }
@@ -236,7 +259,7 @@ function Shell(props: {
   siteName: string
   status: string
   me: Me
-  navigate: (h: string) => void
+  navigate: (h: string, replace?: boolean) => void
   onLogout: () => void
   bare?: boolean
   view?: ViewMode
@@ -246,48 +269,15 @@ function Shell(props: {
   const { siteName, status, me, navigate, onLogout, bare, view, changeView, children } = props
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <button className="flex items-center gap-2" onClick={() => navigate('/')}>
-            <span className="text-lg font-semibold tracking-tight">{siteName}</span>
-            <span
-              className={cn(
-                'size-2 rounded-full',
-                status === 'open' ? 'bg-emerald-500' : status === 'connecting' ? 'bg-amber-500 animate-pulse' : 'bg-red-500',
-              )}
-              title={status === 'open' ? '实时连接正常' : status === 'connecting' ? '连接中…' : '已断开，自动重连中'}
-            />
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{me.username}</span>
-            <button
-              className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="告警中心"
-              onClick={() => navigate('/alerts')}
-            >
-              <Bell className="size-4" />
-            </button>
-            {me.role === 'admin' && (
-              <button
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                onClick={() => navigate('/admin')}
-              >
-                <Settings className="size-4" />
-                管理
-              </button>
-            )}
-            {view && changeView && <ViewModeToggle value={view} onChange={changeView} />}
-            <ThemeToggle />
-            <button
-              className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"
-              title="退出登录"
-              onClick={onLogout}
-            >
-              <LogOut className="size-4" />
-            </button>
-          </div>
-        </div>
-      </header>
+      <TopBar
+        siteName={siteName}
+        status={status}
+        me={me}
+        navigate={navigate}
+        onLogout={onLogout}
+        view={view}
+        changeView={changeView}
+      />
       <main className={`mx-auto max-w-6xl px-4 ${bare ? 'py-4' : 'py-6'}`}>{children}</main>
       {!bare && (
         <footer className="pb-8 text-center text-xs text-muted-foreground">
@@ -297,4 +287,3 @@ function Shell(props: {
     </div>
   )
 }
-

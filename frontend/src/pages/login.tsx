@@ -41,35 +41,33 @@ export function Login({ setupNeeded, siteName, onDone }: { setupNeeded: boolean;
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">{siteName ?? 'zhengtang'}</CardTitle>
-          <CardDescription>{setupNeeded ? '创建管理员账号' : '登录探针面板'}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={submit} className="space-y-4">
+    <Card className="w-full max-w-sm">
+      <CardHeader className="text-center">
+        <CardTitle className="text-xl">{siteName ?? 'zhengtang'}</CardTitle>
+        <CardDescription>{setupNeeded ? '创建管理员账号' : '登录探针面板'}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="username">用户名</Label>
+            <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">密码</Label>
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+          </div>
+          {totpRequired && (
             <div className="space-y-2">
-              <Label htmlFor="username">用户名</Label>
-              <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+              <Label htmlFor="totp">两步验证码</Label>
+              <Input id="totp" inputMode="numeric" maxLength={6} value={totp} onChange={(e) => setTotp(e.target.value)} placeholder="6 位验证码" autoFocus />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">密码</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-            </div>
-            {totpRequired && (
-              <div className="space-y-2">
-                <Label htmlFor="totp">两步验证码</Label>
-                <Input id="totp" inputMode="numeric" maxLength={6} value={totp} onChange={(e) => setTotp(e.target.value)} placeholder="6 位验证码" autoFocus />
-              </div>
-            )}
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? '请稍候…' : setupNeeded ? '创建管理员并登录' : '登录'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? '请稍候…' : setupNeeded ? '创建管理员并登录' : '登录'}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   )
 }

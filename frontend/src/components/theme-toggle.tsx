@@ -24,10 +24,10 @@ export function ThemeToggle() {
     return () => mq.removeEventListener('change', onChange)
   }, [mode])
 
-  const icon = mode === 'dark' ? <Moon className="size-4" /> : mode === 'light' ? <Sun className="size-4" /> : <Monitor className="size-4" />
+  const icon = mode === 'dark' ? <Moon className="size-[18px]" /> : mode === 'light' ? <Sun className="size-[18px]" /> : <Monitor className="size-[18px]" />
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+      <DropdownMenuTrigger title="界面主题" className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[state=open]:bg-accent data-[state=open]:text-foreground">
         {icon}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

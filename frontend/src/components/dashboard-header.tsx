@@ -6,7 +6,7 @@ import {
 import { fmtBytes } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { Check, LayoutGrid, Rows3, SlidersHorizontal } from 'lucide-react'
+import { Check, Grid2x2, LayoutGrid, Rows3 } from 'lucide-react'
 
 export type ViewMode = 'detailed' | 'compact' | 'mini'
 
@@ -77,10 +77,10 @@ export function GroupTabs({
 
 /** 卡片形态切换（localStorage 记住偏好） */
 export function ViewModeToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMode) => void }) {
-  const icon = value === 'compact' ? <Rows3 className="size-4" /> : value === 'mini' ? <SlidersHorizontal className="size-4" /> : <LayoutGrid className="size-4" />
+  const icon = value === 'compact' ? <Rows3 className="size-[18px]" /> : value === 'mini' ? <Grid2x2 className="size-[18px]" /> : <LayoutGrid className="size-[18px]" />
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+      <DropdownMenuTrigger title="卡片形态" className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[state=open]:bg-accent data-[state=open]:text-foreground">
         {icon}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

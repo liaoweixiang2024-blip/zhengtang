@@ -40,6 +40,12 @@ pub struct ServerView {
     pub purchased_at: Option<i64>,
     /// 流量重置日（1-28；None=自然月）
     pub traffic_reset_day: Option<i64>,
+    /// 付费周期（月数：1/3/12/36/60）
+    pub pay_cycle_months: Option<i64>,
+    /// 每期费用
+    pub price_per_cycle: Option<f64>,
+    /// 货币（CNY/USD/EUR/JPY/HKD/GBP）
+    pub currency: Option<String>,
     pub public_visible: bool,
     pub system_info: Option<SystemInfo>,
     pub metrics: Option<RealtimeMetrics>,
@@ -76,6 +82,9 @@ pub struct ServerReg {
     pub traffic_quota_bytes: Option<i64>,
     pub purchased_at: Option<i64>,
     pub traffic_reset_day: Option<i64>,
+    pub pay_cycle_months: Option<i64>,
+    pub price_per_cycle: Option<f64>,
+    pub currency: Option<String>,
 }
 
 pub struct AppState {
@@ -177,7 +186,7 @@ impl AppState {
         self.store
             .with(|c| {
                 let mut stmt = c.prepare(
-                    "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day FROM servers ORDER BY created_at",
+                    "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency FROM servers ORDER BY created_at",
                 )?;
                 let rows = stmt
                     .query_map([], |r| {
@@ -190,6 +199,9 @@ impl AppState {
                             traffic_quota_bytes: r.get(5)?,
                             purchased_at: r.get(7)?,
                             traffic_reset_day: r.get(8)?,
+                            pay_cycle_months: r.get(9)?,
+                            price_per_cycle: r.get(10)?,
+                            currency: r.get(11)?,
                         }, r.get::<_, i64>(6)?))
                     })?
                     .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -209,6 +221,9 @@ impl AppState {
                     expires_at: reg.expires_at,
                     purchased_at: reg.purchased_at,
                     traffic_reset_day: reg.traffic_reset_day,
+                    pay_cycle_months: reg.pay_cycle_months,
+                    price_per_cycle: reg.price_per_cycle,
+                    currency: reg.currency,
                     public_visible: reg.public_visible,
                     system_info: self.system_info.get(&reg.id).map(|s| s.clone()),
                     metrics: self.metrics.get(&reg.id).map(|m| m.clone()),

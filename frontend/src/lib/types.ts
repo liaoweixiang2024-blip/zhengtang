@@ -67,6 +67,9 @@ export interface ServerView {
   expires_at: number | null
   purchased_at: number | null
   traffic_reset_day: number | null
+  pay_cycle_months: number | null
+  price_per_cycle: number | null
+  currency: string | null
   public_visible: boolean
   system_info: SystemInfo | null
   metrics: RealtimeMetrics | null
@@ -77,3 +80,10 @@ export type DashboardEvent =
   | { type: 'snapshot'; servers: ServerView[] }
   | { type: 'update'; server: ServerView }
   | { type: 'offline'; id: string }
+
+// 当前登录用户（/api/auth/me）
+export interface Me {
+  username: string
+  role: string // 'admin' | 'viewer'
+  group_ids: number[]
+}

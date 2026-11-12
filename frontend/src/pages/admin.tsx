@@ -1,5 +1,6 @@
-// 管理页：服务器管理 / 用户 / 分组 / 审计日志
+// 管理页：服务器管理 / 分组 / 用户 / 审计日志 / 告警中心 / 设置
 import { useCallback, useEffect, useState } from 'react'
+import { Alerts } from '@/pages/alerts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,24 +12,37 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
-import { ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2 } from 'lucide-react'
+import { Bell, ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2 } from 'lucide-react'
 
 interface Group { id: number; name: string }
 interface User { id: number; username: string; role: string; totp_enabled: boolean }
 interface AuditLog { id: number; user: string | null; action: string; detail: string; ip: string | null; at: number }
 
-const NAV = [
+// 侧边导航（顶栏用户菜单也复用这份清单）
+export const NAV = [
   { key: 'servers', label: '服务器', icon: Server },
   { key: 'groups', label: '分组', icon: FolderGit2 },
   { key: 'users', label: '用户', icon: Users },
   { key: 'audit', label: '审计日志', icon: ScrollText },
+  { key: 'alerts', label: '告警中心', icon: Bell },
   { key: 'settings', label: '设置', icon: Settings },
 ] as const
 
-type NavKey = (typeof NAV)[number]['key']
+export type NavKey = (typeof NAV)[number]['key']
 
-export function Admin() {
-  const [tab, setTab] = useState<NavKey>('servers')
+/** 从 /admin?tab=xxx 解析合法 tab */
+export function parseAdminTab(query: string): NavKey {
+  const t = new URLSearchParams(query).get('tab')
+  return NAV.some((n) => n.key === t) ? (t as NavKey) : 'servers'
+}
+
+export function Admin({ tab, onTabChange }: { tab?: NavKey; onTabChange?: (k: NavKey) => void }) {
+  const [inner, setInner] = useState<NavKey>('servers')
+  const active = tab ?? inner
+  const select = (k: NavKey) => {
+    setInner(k)
+    onTabChange?.(k)
+  }
   return (
     <div className="flex flex-col gap-6 md:flex-row">
       {/* 侧边导航：窄屏横向滚动，宽屏左侧固定 */}
@@ -36,10 +50,10 @@ export function Admin() {
         {NAV.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => select(key)}
             className={
               'flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ' +
-              (tab === key
+              (active === key
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground')
             }
@@ -50,11 +64,12 @@ export function Admin() {
         ))}
       </nav>
       <div className="min-w-0 flex-1">
-        {tab === 'servers' && <ServersTab />}
-        {tab === 'groups' && <GroupsTab />}
-        {tab === 'users' && <UsersTab />}
-        {tab === 'audit' && <AuditTab />}
-        {tab === 'settings' && <SettingsTab />}
+        {active === 'servers' && <ServersTab />}
+        {active === 'groups' && <GroupsTab />}
+        {active === 'users' && <UsersTab />}
+        {active === 'audit' && <AuditTab />}
+        {active === 'alerts' && <Alerts isAdmin />}
+        {active === 'settings' && <SettingsTab />}
       </div>
     </div>
   )
@@ -94,10 +109,20 @@ function ServersTab() {
     load()
   }
 
+  // 各货币月均费用合计
+  const costStats = monthlyCostByCurrency(servers)
+
   return (
     <Card className="py-4">
       <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="text-base">服务器（{servers.length}）</CardTitle>
+        <div>
+          <CardTitle className="text-base">服务器（{servers.length}）</CardTitle>
+          {costStats.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              月均合计：{costStats.map((c) => `${CURRENCY_SYMBOL[c.currency] ?? c.currency}${c.monthly.toFixed(1)}/月`).join(' · ')}
+            </p>
+          )}
+        </div>
         <AddServerDialog open={addOpen} onOpenChange={setAddOpen} onAdd={add} installCmd={installCmd} onCopy={() => setInstallCmd(null)} />
         {dialServer && <DialDialog server={dialServer} onClose={() => setDialServer(null)} />}
         {procServer && <ProcDialog server={procServer} onClose={() => setProcServer(null)} />}
@@ -110,6 +135,7 @@ function ServersTab() {
               <TableHead>名称</TableHead>
               <TableHead className="hidden md:table-cell">到期</TableHead>
               <TableHead className="hidden sm:table-cell">流量配额</TableHead>
+              <TableHead className="hidden lg:table-cell">费用</TableHead>
               <TableHead className="hidden xl:table-cell">购买/重置</TableHead>
               <TableHead className="w-10">编辑</TableHead>
               <TableHead className="w-10">拨测</TableHead>
@@ -125,6 +151,7 @@ function ServersTab() {
                 <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
                   {s.traffic_quota_bytes ? fmtBytes(s.traffic_quota_bytes) : '不限'}
                 </TableCell>
+                <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">{fmtCost(s)}</TableCell>
                 <TableCell className="hidden text-xs text-muted-foreground xl:table-cell">
                   {s.purchased_at ? dateStr(s.purchased_at) : '—'} · {s.traffic_reset_day ? `每月${s.traffic_reset_day}日` : '自然月'}
                 </TableCell>
@@ -159,6 +186,29 @@ function ServersTab() {
 
 function dateStr(ts: number): string {
   return new Date(ts * 1000).toISOString().slice(0, 10)
+}
+
+// ---------- 费用展示 ----------
+
+export const CYCLE_LABEL: Record<number, string> = { 1: '月付', 3: '季付', 12: '年付', 36: '3年付', 60: '5年付' }
+export const CURRENCY_SYMBOL: Record<string, string> = { CNY: '¥', USD: '$', EUR: '€', JPY: 'JP¥', HKD: 'HK$', GBP: '£' }
+
+export function fmtCost(s: { price_per_cycle: number | null; pay_cycle_months: number | null; currency: string | null }): string {
+  if (s.price_per_cycle == null || !s.pay_cycle_months) return '—'
+  const sym = CURRENCY_SYMBOL[s.currency ?? 'CNY'] ?? ''
+  const price = String(s.price_per_cycle).replace(/\.0+$/, '')
+  return `${sym}${price}/${CYCLE_LABEL[s.pay_cycle_months] ?? `${s.pay_cycle_months}个月`}`
+}
+
+/// 各货币月均合计（管理页统计行用）
+export function monthlyCostByCurrency(servers: ServerView[]): { currency: string; monthly: number }[] {
+  const map = new Map<string, number>()
+  for (const s of servers) {
+    if (s.price_per_cycle == null || !s.pay_cycle_months) continue
+    const cur = s.currency ?? 'CNY'
+    map.set(cur, (map.get(cur) ?? 0) + s.price_per_cycle / s.pay_cycle_months)
+  }
+  return [...map.entries()].map(([currency, monthly]) => ({ currency, monthly }))
 }
 
 function fmtExpiresCell(ts: number | null): string {
@@ -656,6 +706,9 @@ function EditServerDialog({
   const [purchased, setPurchased] = useState(server.purchased_at ? dateStr(server.purchased_at) : '')
   const [quota, setQuota] = useState(server.traffic_quota_bytes ? String(server.traffic_quota_bytes / GB) : '')
   const [resetDay, setResetDay] = useState(server.traffic_reset_day ? String(server.traffic_reset_day) : 'natural')
+  const [payCycle, setPayCycle] = useState(server.pay_cycle_months ? String(server.pay_cycle_months) : 'none')
+  const [price, setPrice] = useState(server.price_per_cycle != null ? String(server.price_per_cycle) : '')
+  const [currency, setCurrency] = useState(server.currency ?? 'CNY')
   const [publicVisible, setPublicVisible] = useState(server.public_visible)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -671,6 +724,12 @@ function EditServerDialog({
       setBusy(false)
       return
     }
+    const priceVal = price ? parseFloat(price) : null
+    if (price && (priceVal == null || isNaN(priceVal) || priceVal < 0)) {
+      setError('费用格式错误')
+      setBusy(false)
+      return
+    }
     const body = {
       name: name.trim() || server.name,
       group_id: groupId === 'none' ? null : Number(groupId),
@@ -678,6 +737,9 @@ function EditServerDialog({
       purchased_at: toTs(purchased),
       traffic_quota_bytes: quotaBytes,
       traffic_reset_day: resetDay === 'natural' ? null : Number(resetDay),
+      pay_cycle_months: payCycle === 'none' ? null : Number(payCycle),
+      price_per_cycle: payCycle === 'none' ? null : priceVal,
+      currency: payCycle === 'none' ? null : currency,
       public_visible: publicVisible,
     }
     const res = await fetch(`/api/admin/servers/${server.id}`, {
@@ -699,7 +761,7 @@ function EditServerDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>编辑服务器</DialogTitle>
-          <DialogDescription>到期、购买时间、流量配额与账期重置日</DialogDescription>
+          <DialogDescription>到期、购买、流量配额、账期与费用信息</DialogDescription>
         </DialogHeader>
         <form onSubmit={save} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -740,6 +802,38 @@ function EditServerDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>付费周期</Label>
+              <Select value={payCycle} onValueChange={setPayCycle}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">未填写</SelectItem>
+                  {Object.entries(CYCLE_LABEL).map(([m, label]) => (
+                    <SelectItem key={m} value={m}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>每期费用</Label>
+              <div className="flex gap-2">
+                <Input
+                  inputMode="decimal"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="留空=不计"
+                  disabled={payCycle === 'none'}
+                />
+                <Select value={currency} onValueChange={setCurrency} disabled={payCycle === 'none'}>
+                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(CURRENCY_SYMBOL).map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <div className="flex items-center justify-between rounded-lg border p-3">

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { fmtBytes } from '@/lib/format'
+import { CURRENCY_SYMBOL, fmtCost } from '@/pages/admin'
 import type { ServerView } from '@/lib/types'
 import { ArrowLeft, Activity, ListTree } from 'lucide-react'
 
@@ -143,6 +144,14 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
               value={server.traffic_reset_day ? `每月 ${server.traffic_reset_day} 日重置` : '自然月'}
             />
             <InfoItem label="本账期流量" value={monthTraffic ? fmtBytes(monthTraffic) : '—'} />
+            <InfoItem
+              label="费用"
+              value={
+                server.price_per_cycle != null && server.pay_cycle_months
+                  ? `${fmtCost(server)}（月均 ${CURRENCY_SYMBOL[server.currency ?? 'CNY'] ?? ''}${(server.price_per_cycle / server.pay_cycle_months).toFixed(1)}）`
+                  : '—'
+              }
+            />
           </CardContent>
         </Card>
       )}
