@@ -51,7 +51,10 @@ export default function App() {
   useEffect(loadMe, [loadMe])
 
   useEffect(() => {
-    fetch('/api/status').then((r) => r.json()).then((d) => setSetupNeeded(!!d.setup_needed))
+    fetch('/api/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setSetupNeeded(!!d?.setup_needed))
+      .catch(() => setSetupNeeded(false))
   }, [])
 
   const changeView = (v: ViewMode) => {
@@ -114,6 +117,12 @@ function Main(props: {
   const { servers, status } = useServers()
 
   const list = useMemo(() => [...servers.values()], [servers])
+  // ⚠ 全部 hooks 必须在任何条件 return 之前（否则路由切换时 hook 数变化 → React 崩溃）
+  const groups = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const s of list) if (s.group_id != null) map.set(s.group_id, (map.get(s.group_id) ?? 0) + 1)
+    return [...map.entries()].map(([id, count]) => ({ id, name: `分组 ${id}`, count }))
+  }, [list])
 
   // 告警中心（所有登录用户）
   if (path === '/alerts') {
@@ -167,12 +176,6 @@ function Main(props: {
   }
 
   // 仪表盘
-  const groups = useMemo(() => {
-    const map = new Map<number, number>()
-    for (const s of list) if (s.group_id != null) map.set(s.group_id, (map.get(s.group_id) ?? 0) + 1)
-    return [...map.entries()].map(([id, count]) => ({ id, name: `分组 ${id}`, count }))
-  }, [list])
-
   const filtered = group === 'all' ? list : list.filter((s) => s.group_id === group)
   const sorted = [...filtered].sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
 
@@ -190,7 +193,7 @@ function Main(props: {
         ) : view === 'mini' ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {sorted.map((s) => (
-              <button key={s.id} className="text-left" onClick={() => navigate(`#/server/${s.id}`)}>
+              <button key={s.id} className="text-left" onClick={() => navigate(`/server/${s.id}`)}>
                 <ServerCardMini server={s} />
               </button>
             ))}
@@ -198,7 +201,7 @@ function Main(props: {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {sorted.map((s) => (
-              <button key={s.id} className="text-left" onClick={() => navigate(`#/server/${s.id}`)}>
+              <button key={s.id} className="text-left" onClick={() => navigate(`/server/${s.id}`)}>
                 <ServerCard server={s} />
               </button>
             ))}

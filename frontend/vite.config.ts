@@ -13,8 +13,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://127.0.0.1:8800',
-      '/ws': { target: 'ws://127.0.0.1:8800', ws: true },
+      '/api': { target: 'https://127.0.0.1:8800', secure: false, changeOrigin: true },
+      '/ws': { target: 'wss://127.0.0.1:8800', ws: true, secure: false },
     },
   },
 })
