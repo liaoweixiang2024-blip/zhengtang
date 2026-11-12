@@ -65,6 +65,8 @@ export interface ServerView {
   online: boolean
   last_seen: number
   expires_at: number | null
+  purchased_at: number | null
+  traffic_reset_day: number | null
   public_visible: boolean
   system_info: SystemInfo | null
   metrics: RealtimeMetrics | null

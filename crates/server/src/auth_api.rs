@@ -343,6 +343,9 @@ struct UpdateServerBody {
     name: Option<String>,
     group_id: Option<Option<i64>>,
     expires_at: Option<Option<i64>>,
+    purchased_at: Option<Option<i64>>,
+    /// 1-28；None=自然月
+    traffic_reset_day: Option<Option<i64>>,
     public_visible: Option<bool>,
     traffic_quota_bytes: Option<Option<i64>>,
 }
@@ -356,7 +359,7 @@ async fn update_server(
     if let Err(e) = require_admin(&state, &jar) {
         return e;
     }
-    let _ = state.store.with(|c| {
+    let result = state.store.with(|c| {
         if let Some(n) = &body.name {
             c.execute("UPDATE servers SET name = ?1 WHERE id = ?2", rusqlite::params![n, id])?;
         }
@@ -373,13 +376,29 @@ async fn update_server(
         if let Some(p) = body.public_visible {
             c.execute("UPDATE servers SET public_visible = ?1 WHERE id = ?2", rusqlite::params![p as i64, id])?;
         }
+        if let Some(p) = body.purchased_at {
+            let v: Option<i64> = p;
+            c.execute("UPDATE servers SET purchased_at = ?1 WHERE id = ?2", rusqlite::params![v, id])?;
+        }
+        if let Some(rd) = body.traffic_reset_day {
+            // 合法值：1-28 或 NULL（自然月）
+            if let Some(d) = rd {
+                if !(1..=28).contains(&d) {
+                    anyhow::bail!("流量重置日必须是 1-28");
+                }
+            }
+            c.execute("UPDATE servers SET traffic_reset_day = ?1 WHERE id = ?2", rusqlite::params![rd, id])?;
+        }
         if let Some(q) = body.traffic_quota_bytes {
             let v: Option<i64> = q;
             c.execute("UPDATE servers SET traffic_quota_bytes = ?1 WHERE id = ?2", rusqlite::params![v, id])?;
         }
         Ok(())
     });
-    Json(json!({ "ok": true })).into_response()
+    match result {
+        Ok(()) => Json(json!({ "ok": true })).into_response(),
+        Err(e) => err(StatusCode::BAD_REQUEST, &e.to_string()),
+    }
 }
 
 async fn delete_server(

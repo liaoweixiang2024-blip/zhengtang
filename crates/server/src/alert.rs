@@ -117,15 +117,24 @@ async fn evaluate_all(state: &Arc<AppState>, engine: &EngineState) -> anyhow::Re
                     if q <= 0 {
                         return None;
                     }
-                    let month = crate::jobs::year_month_from_days(unix_now() / 86400);
-                    let month_str = format!("{:04}-{:02}", month.0, month.1);
+                    let reset_day: Option<i64> = state
+                        .store
+                        .with(|c| {
+                            Ok(c.query_row(
+                                "SELECT traffic_reset_day FROM servers WHERE id = ?1",
+                                [sid],
+                                |r| r.get(0),
+                            ).ok().flatten())
+                        })
+                        .unwrap_or(None);
+                    let period = crate::jobs::billing_period(unix_now(), reset_day);
                     let used: i64 = state
                         .store
                         .with(|c| {
                             Ok(c
                                 .query_row(
                                     "SELECT bytes_in + bytes_out FROM traffic_monthly WHERE server_id = ?1 AND month = ?2",
-                                    rusqlite::params![sid, month_str],
+                                    rusqlite::params![sid, period],
                                     |r| r.get::<_, i64>(0),
                                 )
                                 .unwrap_or(0))

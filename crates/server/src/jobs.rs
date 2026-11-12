@@ -73,14 +73,22 @@ async fn aggregation_loop(state: Arc<AppState>) {
                     ],
                 )?;
 
-                // 月度流量累计
-                let month = month_string(ts);
+                // 月度流量累计（账期按该机流量重置日对齐）
+                let reset_day: Option<i64> = c
+                    .query_row(
+                        "SELECT traffic_reset_day FROM servers WHERE id = ?1",
+                        [id],
+                        |r| r.get(0),
+                    )
+                    .ok()
+                    .flatten();
+                let period = billing_period(ts, reset_day);
                 c.execute(
                     "INSERT INTO traffic_monthly (server_id, month, bytes_in, bytes_out)
                      VALUES (?1, ?2, ?3, ?4)
                      ON CONFLICT(server_id, month)
                      DO UPDATE SET bytes_in = bytes_in + ?3, bytes_out = bytes_out + ?4",
-                    rusqlite::params![id, month, di as i64, dou as i64],
+                    rusqlite::params![id, period, di as i64, dou as i64],
                 )?;
             }
             Ok(())
@@ -121,11 +129,51 @@ async fn retention_loop(state: Arc<AppState>) {
 }
 
 fn month_string(ts: i64) -> String {
-    // unix 秒 → 'YYYY-MM'（UTC，月度计费口径按 UTC 对齐即可）
-    let days = ts / 86400;
-    // 1970-01-01 起算
-    let (y, m) = year_month_from_days(days);
+    // unix 秒 → 'YYYY-MM'（自然月，UTC）
+    let (y, m) = year_month_from_days(ts / 86400);
     format!("{y:04}-{m:02}")
+}
+
+/// 账期 key：流量统计归入哪个周期。
+/// - reset_day=None：自然月，key='YYYY-MM'
+/// - reset_day=d(1-28)：按月对齐到 d 号的账期，key='YYYY-MM-DD'（当期起始日）
+///   例：d=15，3-20 → 期起点 3-15（key 2026-03-15）；3-10 → 期起点 2-15（key 2026-02-15）
+pub fn billing_period(ts: i64, reset_day: Option<i64>) -> String {
+    let Some(d) = reset_day else { return month_string(ts) };
+    let d = d.clamp(1, 28) as u32;
+
+    // days → (y, m, day) 民用日期
+    let mut days = ts / 86400;
+    let mut y = 1970i64;
+    loop {
+        let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+        let ydays = if leap { 366 } else { 365 };
+        if days >= ydays {
+            days -= ydays;
+            y += 1;
+        } else {
+            break;
+        }
+    }
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let mdays = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut m = 1u32;
+    let mut day = days as u32 + 1;
+    for &md in &mdays {
+        if day <= md {
+            break
+        }
+        day -= md;
+        m += 1;
+    }
+
+    if day >= d {
+        format!("{y:04}-{m:02}-{d:02}")
+    } else {
+        // 归属上月账期：起点 = 上月 d 号
+        let (py, pm) = if m == 1 { (y - 1, 12) } else { (y, (m - 1) as i64) };
+        format!("{py:04}-{pm:02}-{d:02}")
+    }
 }
 
 pub fn year_month_from_days(days_since_epoch: i64) -> (i64, i64) {
@@ -158,6 +206,44 @@ pub fn year_month_from_days(days_since_epoch: i64) -> (i64, i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn billing_period_natural_month() {
+        assert_eq!(billing_period(1794384000, None), "2026-11");
+    }
+
+    #[test]
+    fn billing_period_anchor_day() {
+        // 2026-11-12，reset=15 → 归 2026-10-15 期
+        let ts_1112 = day_ts(2026, 11, 12);
+        assert_eq!(billing_period(ts_1112, Some(15)), "2026-10-15");
+        // 2026-11-20 → 归 2026-11-15 期
+        let ts_1120 = day_ts(2026, 11, 20);
+        assert_eq!(billing_period(ts_1120, Some(15)), "2026-11-15");
+        // 跨年：2027-01-05 reset=15 → 2026-12-15 期
+        let ts_0105 = day_ts(2027, 1, 5);
+        assert_eq!(billing_period(ts_0105, Some(15)), "2026-12-15");
+    }
+
+    fn day_ts(y: i64, m: u32, d: u32) -> i64 {
+        // 复用民用历换算：直接调 billing_period 内部逻辑太绕，用秒级近似构造
+        // 1970 起步累加
+        let mut days = 0i64;
+        for yy in 1970..y {
+            let leap = (yy % 4 == 0 && yy % 100 != 0) || yy % 400 == 0;
+            days += if leap { 366 } else { 365 };
+        }
+        let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+        let mdays = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        for (i, &md) in mdays.iter().enumerate() {
+            if (i as u32) + 1 >= m {
+                break
+            }
+            days += md as i64;
+        }
+        days += d as i64 - 1;
+        days * 86400 + 43200 // 当天正午，避免时区边界
+    }
 
     #[test]
     fn month_string_correct() {

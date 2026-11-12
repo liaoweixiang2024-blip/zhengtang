@@ -137,7 +137,12 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
             <InfoItem label="CPU" value={`${si.cpu_model} (${si.cpu_cores} 核)`} />
             <InfoItem label="内存" value={fmtBytes(si.mem_total)} />
             <InfoItem label="磁盘" value={fmtBytes(si.disk_total)} />
-            <InfoItem label="本月流量" value={fmtBytes(monthTraffic)} />
+            <InfoItem label="购买时间" value={server.purchased_at ? new Date(server.purchased_at * 1000).toISOString().slice(0, 10) : '—'} />
+            <InfoItem
+              label="流量账期"
+              value={server.traffic_reset_day ? `每月 ${server.traffic_reset_day} 日重置` : '自然月'}
+            />
+            <InfoItem label="本账期流量" value={monthTraffic ? fmtBytes(monthTraffic) : '—'} />
           </CardContent>
         </Card>
       )}

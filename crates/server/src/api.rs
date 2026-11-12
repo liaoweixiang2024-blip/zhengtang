@@ -117,12 +117,20 @@ async fn history(
         })
         .unwrap_or_default();
 
+    // 账期 key 按该机流量重置日对齐（与聚合侧一致）
+    let period = state.store.with(|c| {
+        let reset_day: Option<i64> = c
+            .query_row("SELECT traffic_reset_day FROM servers WHERE id = ?1", [&id], |r| r.get(0))
+            .ok()
+            .flatten();
+        Ok(crate::jobs::billing_period(crate::store::unix_now(), reset_day))
+    }).unwrap_or_else(|_| current_month());
     let total_bytes = state
         .store
         .with(|c| {
             Ok(c.query_row(
                 "SELECT COALESCE(bytes_in,0) + COALESCE(bytes_out,0) FROM traffic_monthly WHERE server_id = ?1 AND month = ?2",
-                rusqlite::params![id, current_month()],
+                rusqlite::params![id, period],
                 |r| r.get::<_, i64>(0),
             ).unwrap_or(0))
         })

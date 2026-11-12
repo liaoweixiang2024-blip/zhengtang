@@ -9,31 +9,54 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fmtBytes } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
-import { ListTree, Plus, Radar, Trash2 } from 'lucide-react'
+import { ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2 } from 'lucide-react'
 
 interface Group { id: number; name: string }
 interface User { id: number; username: string; role: string; totp_enabled: boolean }
 interface AuditLog { id: number; user: string | null; action: string; detail: string; ip: string | null; at: number }
 
+const NAV = [
+  { key: 'servers', label: '服务器', icon: Server },
+  { key: 'groups', label: '分组', icon: FolderGit2 },
+  { key: 'users', label: '用户', icon: Users },
+  { key: 'audit', label: '审计日志', icon: ScrollText },
+  { key: 'settings', label: '设置', icon: Settings },
+] as const
+
+type NavKey = (typeof NAV)[number]['key']
+
 export function Admin() {
+  const [tab, setTab] = useState<NavKey>('servers')
   return (
-    <Tabs defaultValue="servers" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="servers">服务器</TabsTrigger>
-        <TabsTrigger value="groups">分组</TabsTrigger>
-        <TabsTrigger value="users">用户</TabsTrigger>
-        <TabsTrigger value="audit">审计日志</TabsTrigger>
-        <TabsTrigger value="settings">设置</TabsTrigger>
-      </TabsList>
-      <TabsContent value="servers"><ServersTab /></TabsContent>
-      <TabsContent value="groups"><GroupsTab /></TabsContent>
-      <TabsContent value="users"><UsersTab /></TabsContent>
-      <TabsContent value="audit"><AuditTab /></TabsContent>
-      <TabsContent value="settings"><SettingsTab /></TabsContent>
-    </Tabs>
+    <div className="flex flex-col gap-6 md:flex-row">
+      {/* 侧边导航：窄屏横向滚动，宽屏左侧固定 */}
+      <nav className="flex gap-1 overflow-x-auto pb-1 md:w-44 md:shrink-0 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0">
+        {NAV.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={
+              'flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ' +
+              (tab === key
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground')
+            }
+          >
+            <Icon className="size-4" />
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className="min-w-0 flex-1">
+        {tab === 'servers' && <ServersTab />}
+        {tab === 'groups' && <GroupsTab />}
+        {tab === 'users' && <UsersTab />}
+        {tab === 'audit' && <AuditTab />}
+        {tab === 'settings' && <SettingsTab />}
+      </div>
+    </div>
   )
 }
 
@@ -46,6 +69,7 @@ function ServersTab() {
   const [installCmd, setInstallCmd] = useState<string | null>(null)
   const [dialServer, setDialServer] = useState<ServerView | null>(null)
   const [procServer, setProcServer] = useState<ServerView | null>(null)
+  const [editServer, setEditServer] = useState<ServerView | null>(null)
 
   const load = useCallback(() => {
     fetch('/api/admin/servers').then((r) => r.json()).then((d) => setServers(d.servers ?? []))
@@ -64,15 +88,6 @@ function ServersTab() {
     load()
   }
 
-  const update = async (id: string, patch: Record<string, unknown>) => {
-    await fetch(`/api/admin/servers/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    })
-    load()
-  }
-
   const remove = async (id: string, name: string) => {
     if (!confirm(`确定删除 ${name}？其历史数据将一并删除`)) return
     await fetch(`/api/admin/servers/${id}`, { method: 'DELETE' })
@@ -86,16 +101,17 @@ function ServersTab() {
         <AddServerDialog open={addOpen} onOpenChange={setAddOpen} onAdd={add} installCmd={installCmd} onCopy={() => setInstallCmd(null)} />
         {dialServer && <DialDialog server={dialServer} onClose={() => setDialServer(null)} />}
         {procServer && <ProcDialog server={procServer} onClose={() => setProcServer(null)} />}
+        {editServer && <EditServerDialog server={editServer} groups={groups} onClose={() => setEditServer(null)} onSaved={load} />}
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>名称</TableHead>
-              <TableHead>分组</TableHead>
-              <TableHead>到期日</TableHead>
+              <TableHead className="hidden md:table-cell">到期</TableHead>
               <TableHead className="hidden sm:table-cell">流量配额</TableHead>
-              <TableHead>公开展示</TableHead>
+              <TableHead className="hidden xl:table-cell">购买/重置</TableHead>
+              <TableHead className="w-10">编辑</TableHead>
               <TableHead className="w-10">拨测</TableHead>
               <TableHead className="w-10">进程</TableHead>
               <TableHead className="w-10"></TableHead>
@@ -105,31 +121,17 @@ function ServersTab() {
             {servers.map((s) => (
               <TableRow key={s.id}>
                 <TableCell className="font-medium">{s.name}</TableCell>
-                <TableCell>
-                  <Select
-                    value={s.group_id ? String(s.group_id) : 'none'}
-                    onValueChange={(v) => update(s.id, { group_id: v === 'none' ? null : Number(v) })}
-                  >
-                    <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">未分组</SelectItem>
-                      {groups.map((g) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <TableCell className="hidden text-xs md:table-cell">{fmtExpiresCell(s.expires_at)}</TableCell>
+                <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
+                  {s.traffic_quota_bytes ? fmtBytes(s.traffic_quota_bytes) : '不限'}
+                </TableCell>
+                <TableCell className="hidden text-xs text-muted-foreground xl:table-cell">
+                  {s.purchased_at ? dateStr(s.purchased_at) : '—'} · {s.traffic_reset_day ? `每月${s.traffic_reset_day}日` : '自然月'}
                 </TableCell>
                 <TableCell>
-                  <DateCell
-                    value={s.expires_at ? new Date(s.expires_at * 1000).toISOString().slice(0, 10) : ''}
-                    onChange={(v) => update(s.id, { expires_at: v ? Math.floor(new Date(v + 'T12:00:00Z').getTime() / 1000) : null })}
-                  />
-                </TableCell>
-                <TableCell className="hidden sm:table-cell">
-                  <span className="text-xs text-muted-foreground">
-                    {s.traffic_quota_bytes ? fmtBytes(s.traffic_quota_bytes) : '不限'}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Switch checked={s.public_visible} onCheckedChange={(v) => update(s.id, { public_visible: v })} />
+                  <Button variant="ghost" size="icon" title="编辑" onClick={() => setEditServer(s)}>
+                    <Pencil className="size-4 text-muted-foreground" />
+                  </Button>
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="icon" title="拨测任务" onClick={() => setDialServer(s)}>
@@ -155,15 +157,15 @@ function ServersTab() {
   )
 }
 
-function DateCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <Input
-      type="date"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-7 w-36 text-xs"
-    />
-  )
+function dateStr(ts: number): string {
+  return new Date(ts * 1000).toISOString().slice(0, 10)
+}
+
+function fmtExpiresCell(ts: number | null): string {
+  if (!ts) return '长期'
+  const days = Math.floor((ts * 1000 - Date.now()) / 86400000)
+  const d = dateStr(ts)
+  return days < 0 ? `${d}（已过期）` : `${d}（${days}天）`
 }
 
 function AddServerDialog({
@@ -632,5 +634,129 @@ function SettingsTab() {
         </form>
       </CardContent>
     </Card>
+  )
+}
+
+
+// ---------- 服务器编辑（到期/购买/流量配额/重置日/分组/公开展示） ----------
+
+const GB = 1024 ** 3
+
+function EditServerDialog({
+  server, groups, onClose, onSaved,
+}: {
+  server: ServerView
+  groups: Group[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [name, setName] = useState(server.name)
+  const [groupId, setGroupId] = useState<string>(server.group_id ? String(server.group_id) : 'none')
+  const [expires, setExpires] = useState(server.expires_at ? dateStr(server.expires_at) : '')
+  const [purchased, setPurchased] = useState(server.purchased_at ? dateStr(server.purchased_at) : '')
+  const [quota, setQuota] = useState(server.traffic_quota_bytes ? String(server.traffic_quota_bytes / GB) : '')
+  const [resetDay, setResetDay] = useState(server.traffic_reset_day ? String(server.traffic_reset_day) : 'natural')
+  const [publicVisible, setPublicVisible] = useState(server.public_visible)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setBusy(true)
+    const toTs = (v: string) => (v ? Math.floor(new Date(v + 'T12:00:00Z').getTime() / 1000) : null)
+    const quotaBytes = quota ? Math.round(parseFloat(quota) * GB) : null
+    if (quota && (isNaN(quotaBytes!) || quotaBytes! <= 0)) {
+      setError('流量配额格式错误')
+      setBusy(false)
+      return
+    }
+    const body = {
+      name: name.trim() || server.name,
+      group_id: groupId === 'none' ? null : Number(groupId),
+      expires_at: toTs(expires),
+      purchased_at: toTs(purchased),
+      traffic_quota_bytes: quotaBytes,
+      traffic_reset_day: resetDay === 'natural' ? null : Number(resetDay),
+      public_visible: publicVisible,
+    }
+    const res = await fetch(`/api/admin/servers/${server.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    setBusy(false)
+    if (!res.ok) {
+      setError((await res.json()).error ?? '保存失败')
+      return
+    }
+    onSaved()
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>编辑服务器</DialogTitle>
+          <DialogDescription>到期、购买时间、流量配额与账期重置日</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={save} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>名称</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>分组</Label>
+              <Select value={groupId} onValueChange={setGroupId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">未分组</SelectItem>
+                  {groups.map((g) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>到期日</Label>
+              <Input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>购买时间</Label>
+              <Input type="date" value={purchased} onChange={(e) => setPurchased(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>流量配额 (GB/月)</Label>
+              <Input inputMode="decimal" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="留空=不限" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>流量重置日</Label>
+              <Select value={resetDay} onValueChange={setResetDay}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="natural">按自然月（1 号）</SelectItem>
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                    <SelectItem key={d} value={String(d)}>每月 {d} 日</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <span className="text-sm">公开展示（/public 匿名可见）</span>
+            <Switch checked={publicVisible} onCheckedChange={setPublicVisible} />
+          </div>
+          {purchased && resetDay === 'natural' && (
+            <p className="text-xs text-muted-foreground">
+              提示：已填购买时间，可把重置日设为购买日对应的日子，流量将按购买日对齐的账期统计
+            </p>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? '保存中…' : '保存'}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
