@@ -74,13 +74,20 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
     }
   }, [server.id, range])
 
+  // 时间标签分级：≤6h 只显示时分；24h 带日；≥7d 带月日
+  const timeLabel = useMemo(() => {
+    const span = range === '1h' ? 1 : range === '6h' ? 6 : range === '24h' ? 24 : 24 * 7
+    return (ts: number) => {
+      const d = new Date(ts * 1000)
+      if (span <= 6) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      if (span <= 24) return d.toLocaleTimeString('zh-CN', { day: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' ')
+      return d.toLocaleTimeString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' ')
+    }
+  }, [range])
+
   const chartData = useMemo(
-    () =>
-      points.map((p) => ({
-        ...p,
-        time: new Date(p.ts * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-      })),
-    [points],
+    () => points.map((p) => ({ ...p, time: timeLabel(p.ts) })),
+    [points, timeLabel],
   )
 
   const si = server.system_info
@@ -230,6 +237,7 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
             data={chartData}
             config={{ cpu: { label: 'CPU', color: 'var(--chart-1)' } }}
             yFormatter={(v) => `${v.toFixed(0)}%`}
+            valueFormatter={(v) => `${v.toFixed(1)}%`}
             domain={[0, 100]}
           />
           <ChartCard
@@ -237,6 +245,7 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
             data={chartData}
             config={{ mem_used: { label: '内存', color: 'var(--chart-2)' } }}
             yFormatter={(v) => fmtBytes(v, 0)}
+            valueFormatter={(v) => fmtBytes(v, 1)}
             domain={si?.mem_total ? [0, si.mem_total] : undefined}
           />
           <ChartCard
@@ -247,12 +256,14 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
               net_out: { label: '上传', color: 'var(--chart-4)' },
             }}
             yFormatter={(v) => fmtBytes(v, 0)}
+            valueFormatter={(v) => fmtBytes(v, 1)}
           />
           <ChartCard
             title="负载（1min）"
             data={chartData}
             config={{ load1: { label: 'load1', color: 'var(--chart-5)' } }}
-            yFormatter={(v) => v.toFixed(2)}
+            yFormatter={(v) => v.toFixed(1)}
+            valueFormatter={(v) => v.toFixed(2)}
           />
         </div>
       )}
@@ -275,9 +286,12 @@ function ChartCard(props: {
   data: Record<string, any>[]
   config: ChartConfig
   yFormatter?: (v: number) => string
+  /** tooltip 数值格式化（缺省用 yFormatter） */
+  valueFormatter?: (v: number) => string
   domain?: [number | 'auto', number | 'auto']
 }) {
-  const { title, data, config, yFormatter, domain } = props
+  const { title, data, config, yFormatter, valueFormatter, domain } = props
+  const fmt = valueFormatter ?? yFormatter
   const dataKeys = Object.keys(config)
   return (
     <Card className="py-4">
@@ -302,7 +316,18 @@ function ChartCard(props: {
               domain={domain ?? ['auto', 'auto']}
               tickFormatter={yFormatter}
             />
-            <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  indicator="line"
+                  formatter={(value) => (
+                    <span className="font-mono font-semibold tabular-nums">
+                      {fmt?.(Number(value)) ?? Number(value).toLocaleString()}
+                    </span>
+                  )}
+                />
+              }
+            />
             {dataKeys.map((k) => (
               <Area
                 key={k}
