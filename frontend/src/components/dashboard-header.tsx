@@ -125,7 +125,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
     },
     {
       label: '今日流量',
-      value: fmtBytes(today?.in ?? 0),
+      value: `↓ ${fmtBytes(today?.in ?? 0)}`,
       sub: `↑ ${fmtBytes(today?.out ?? 0)}`,
       rows: (today?.per_server ?? [])
         .filter((r) => r.in + r.out > 0)
@@ -133,7 +133,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
     },
     {
       label: '总流量',
-      value: fmtBytes(totalIn),
+      value: `↓ ${fmtBytes(totalIn)}`,
       sub: `↑ ${fmtBytes(totalOut)}`,
       rows: [...servers]
         .filter((s) => s.metrics)
