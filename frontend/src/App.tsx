@@ -7,6 +7,7 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import { Login } from '@/pages/login'
 import { Admin } from '@/pages/admin'
 import { Alerts } from '@/pages/alerts'
+import { PublicPage } from '@/pages/public'
 import { ServerDetail } from '@/pages/server-detail'
 import { useServers } from '@/hooks/useServers'
 import { cn } from '@/lib/utils'
@@ -58,6 +59,11 @@ export default function App() {
     await fetch('/api/auth/logout', { method: 'POST' })
     setMe(null)
     navigate('#/login')
+  }
+
+  // 公开展示页：匿名可访问（在登录判断之前）
+  if (hash === '#/public') {
+    return <PublicPage />
   }
 
   // 加载中

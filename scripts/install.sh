@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# zhengtang-agent 一键安装（curl | sh）
+# 用法:
+#   curl -fsSL https://<server>/install.sh | sh -s -- \
+#     --server wss://<server>:8800/ws/agent \
+#     --id <agent_id> --key <hex> --fingerprint <hex>
+set -euo pipefail
+
+# ---------- 参数 ----------
+SERVER="" ID="" KEY="" FINGERPRINT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --server) SERVER="$2"; shift 2 ;;
+    --id) ID="$2"; shift 2 ;;
+    --key) KEY="$2"; shift 2 ;;
+    --fingerprint) FINGERPRINT="$2"; shift 2 ;;
+    *) echo "未知参数: $1"; exit 1 ;;
+  esac
+done
+[ -n "$SERVER" ] && [ -n "$ID" ] && [ -n "$KEY" ] || {
+  echo "缺少 --server / --id / --key"; exit 1
+}
+
+# ---------- 探测架构 ----------
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64)  TARGET="x86_64-unknown-linux-musl" ;;
+  aarch64|arm64) TARGET="aarch64-unknown-linux-musl" ;;
+  armv7l|armv7) TARGET="armv7-unknown-linux-musleabihf" ;;
+  *) echo "不支持的架构: $ARCH"; exit 1 ;;
+esac
+[ "$(uname -s)" = "Linux" ] || { echo "此脚本仅支持 Linux（macOS/Windows 请手动下载）"; exit 1; }
+
+# ---------- 下载 ----------
+VERSION="${ZT_VERSION:-latest}"
+BASE="${ZT_BASE_URL:-https://github.com/zhengtang/zhengtang/releases}"
+if [ "$VERSION" = "latest" ]; then
+  URL="$BASE/latest/download/zhengtang-agent-$TARGET.tar.gz"
+else
+  URL="$BASE/download/$VERSION/zhengtang-agent-$TARGET.tar.gz"
+fi
+echo "下载 $URL"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+curl -fsSL "$URL" -o "$TMP/agent.tar.gz"
+tar -xzf "$TMP/agent.tar.gz" -C "$TMP"
+
+# ---------- 安装 ----------
+install -m 0755 "$TMP/zhengtang-agent" /usr/local/bin/zhengtang-agent
+mkdir -p /etc/zhengtang
+chmod 0700 /etc/zhengtang
+cat > /etc/zhengtang/agent.toml <<EOF
+server = "$SERVER"
+id = "$ID"
+key = "$KEY"
+${FINGERPRINT:+fingerprint = "$FINGERPRINT"}
+EOF
+chmod 0600 /etc/zhengtang/agent.toml
+
+# ---------- systemd ----------
+# 非 root、无任何特权（严格只读探针不需要 root；进程监控对他 uid 可见性受限）
+cat > /etc/systemd/system/zhengtang-agent.service <<'EOF'
+[Unit]
+Description=zhengtang agent (read-only probe)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+DynamicUser=yes
+ExecStart=/usr/local/bin/zhengtang-agent --config /etc/zhengtang/agent.toml
+Restart=always
+RestartSec=5
+# 加固
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# 只读探针：无写入需求
+ReadWritePaths=
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now zhengtang-agent
+echo "✓ zhengtang-agent 已安装并启动（systemd 单元含沙箱加固）"
+echo "  日志: journalctl -u zhengtang-agent -f"

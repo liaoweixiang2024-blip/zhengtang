@@ -17,6 +17,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/status", get(status))
         .route("/api/servers", get(servers))
         .route("/api/servers/{id}/history", get(history))
+        // 公开展示页（匿名，仅 public_visible 的脱敏子集）
+        .route("/api/public/servers", get(public_servers))
 }
 
 async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -135,4 +137,28 @@ fn current_month() -> String {
     let days = ts / 86400;
     let (y, m) = crate::jobs::year_month_from_days(days);
     format!("{y:04}-{m:02}")
+}
+
+
+/// 公开展示：仅 public_visible 服务器；不含 IP/系统详情/到期价等敏感字段。
+async fn public_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let views: Vec<_> = state
+        .server_views()
+        .into_iter()
+        .filter(|v| v.public_visible)
+        .map(|v| {
+            let m = v.metrics;
+            json!({
+                "name": v.name,
+                "online": v.online,
+                "cpu_usage": m.as_ref().map(|m| m.cpu_usage),
+                "mem_pct": m.as_ref().and_then(|m|
+                    if m.mem_total > 0 { Some((m.mem_used as f64 / m.mem_total as f64) * 100.0) } else { None }),
+                "net_in_speed": m.as_ref().map(|m| m.net_in_speed),
+                "net_out_speed": m.as_ref().map(|m| m.net_out_speed),
+                "uptime_secs": m.as_ref().map(|m| m.uptime_secs),
+            })
+        })
+        .collect();
+    (StatusCode::OK, Json(json!({ "servers": views })))
 }
