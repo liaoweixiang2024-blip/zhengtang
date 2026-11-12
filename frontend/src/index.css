@@ -141,3 +141,192 @@
   [data-stats] .stat-wrap { white-space: normal; }
   [data-stats] [data-stat-date] { font-size: 11px; padding-left: 0; white-space: normal; }
 }
+
+/* ---- 节点地球（jikasei 移植）---- */
+:root {
+  --globe-ocean: rgba(72, 118, 136, 0.12);
+  --globe-land: rgba(118, 86, 40, 0.3);
+  --globe-rim: rgba(42, 33, 20, 0.2);
+  --warn: oklch(0.62 0.15 70);
+}
+.dark {
+  --globe-ocean: rgba(86, 138, 160, 0.12);
+  --globe-land: rgba(186, 154, 102, 0.26);
+  --globe-rim: rgba(8, 8, 8, 0.36);
+  --warn: oklch(0.8 0.13 75);
+}
+@media (min-width: 900px) {
+  .globe-panel { grid-template-columns: 1.35fr 0.65fr; }
+}
+   复刻自上游的 `.home-globe` / `.atlas` / `.atlas-side` 三块（值都对着抄），
+   换成本站的设计 token。规则**故意不放进 `@layer`**：SVG 内部那些类（.globe-land 等）
+   上游是直接写的，不套层才能稳稳盖住 Tailwind 的工具类。
+
+   两列的比例 1.35fr / 0.65fr 与圆盘高度 280px 都照上游；窄到 900px 以下改成上下两段
+   （上游是干脆不画，本站留着，窄屏自动降到 low 档）。 */
+.globe-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+  .globe-panel { grid-template-columns: 1.35fr 0.65fr; }
+.globe-atlas {
+  position: relative;
+  height: 280px;
+  overflow: hidden;
+  cursor: grab;
+  /* 只让出竖向：手机上在地球上竖着划是滚页面（见组件注释），横着划才是转地球。 */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.globe-atlas[data-drag="true"] { cursor: grabbing; }
+  .globe-atlas { height: 210px; }
+.globe-atlas svg { display: block; width: 100%; height: 100%; color: var(--foreground); }
+   "点某台机器"是两件互不干扰的事（上游同此）。 */
+.globe-atlas svg text,
+.globe-atlas svg path,
+.globe-atlas svg line,
+.globe-atlas svg circle { pointer-events: none; }
+.globe-atlas svg .hit { pointer-events: auto; cursor: pointer; }
+   针的外面、不压旁边的标签；SVG 上各家对原生 outline 的处理不一，关掉换这个。
+   用 focus-visible（不是 focus）：鼠标点击过针之后不留环。 */
+.globe-atlas svg .hit:focus-visible { outline: none; stroke: var(--foreground); stroke-width: 1.5; }
+   Chrome 里 text 的命中本来就近乎整行盒，`bounding-box` 让内容框整个可点；
+   `visiblePainted` 写在前面，给不认前者的浏览器兜底（回落到字形 + 描边）。 */
+.globe-atlas svg .globe-label { pointer-events: visiblePainted; pointer-events: bounding-box; cursor: pointer; }
+.globe-ocean { fill: var(--globe-ocean); }
+.globe-land { fill: var(--globe-land); stroke: none; stroke-linejoin: round; stroke-linecap: round; }
+.globe-coast { fill: none; stroke: var(--foreground); stroke-width: 0.55; stroke-opacity: 0.36; }
+.globe-disk { fill: url(#globe-shade); stroke: var(--foreground); stroke-width: 1.05; stroke-opacity: 0.42; }
+.globe-wire { fill: none; stroke: var(--foreground); stroke-opacity: 0.1; }
+.globe-sweep { fill: none; stroke: var(--foreground); }
+.globe-base { stroke: var(--foreground); stroke-opacity: 0.4; stroke-width: 1; }
+.globe-link { fill: none; stroke: var(--foreground); stroke-width: 0.55; opacity: 0.32; }
+.globe-stem { fill: none; stroke: var(--foreground); stroke-width: 0.75; }
+   不表示在线与否 —— 在线/离线在下面的卡片里有话说。 */
+.globe-pin { fill: none; stroke: var(--warn); stroke-width: 1.15; }
+.globe-selected-ring { fill: none; stroke: var(--foreground); stroke-width: 1.2; stroke-dasharray: 2 2; }
+.globe-selected-core { fill: var(--foreground); stroke: var(--card); stroke-width: 1.4; }
+   文字仍然读得出来。字体大小与字距照上游。 */
+.globe-label {
+  fill: var(--muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, "IBM Plex Mono", monospace;
+  font-size: 9.35px;
+  stroke: var(--card);
+  stroke-width: 3;
+  paint-order: stroke;
+  stroke-linejoin: round;
+}
+.globe-caption {
+  fill: var(--muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, "IBM Plex Mono", monospace;
+  font-size: 8.8px;
+  letter-spacing: 1.4px;
+}
+.globe-side {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 8px 18px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+  .globe-side { border-top: 0; border-left: 1px solid var(--border); }
+.globe-side-title { grid-column: 1 / -1; color: var(--muted-foreground); }
+.globe-reg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.globe-reg:hover { color: var(--foreground); }
+  .globe-reg { min-height: 32px; }
+.globe-reg-all { grid-column: 1 / -1; }
+   （100 台实测 57 行 → 面板 845px 高）。上限对齐地球那一格：桌面 200、窄屏 232
+   （约 5 行半，露半行给「还能滚」的提示）。列表本来就短的小机群看不出区别。 */
+.globe-rows {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 8px 18px;
+  max-height: 200px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  /* 底部渐隐 + 14px 垫片：滚到底时渐隐盖的是垫片、最后一行完整；没滚到底时
+     半截行是渐隐的（读起来像「下面还有」而不是「被切掉了」）。 */
+  padding-bottom: 14px;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+}
+  .globe-rows { max-height: 232px; }
+.globe-reg span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.globe-reg b { color: var(--foreground); font-weight: 500; font-variant-numeric: tabular-nums; }
+   悬停的 title 里写着「N 台 · M 台离线」。颜色跟针同一族的琥珀色。 */
+.globe-reg-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 4px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--warn);
+}
+   否则整块的行高会跟着跳）。 */
+.globe-reg[aria-pressed="true"] { color: var(--foreground); font-weight: 600; }
+.globe-reg-flag {
+  display: inline-block;
+  height: 12px;
+  width: 16px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  border-radius: 2px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.globe-count {
+  fill: var(--warn);
+  font-size: 7px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--card);
+  stroke-width: 1.6px;
+}
+.globe-toggle[aria-pressed="false"] { color: var(--muted-foreground); opacity: 0.6; }
+   手指比鼠标粗 —— Apple 的通行线是 44×44，WCAG 2.2 的硬线（2.5.8）是 24×24。
+   撑出来的那圈是 ::before，透明、不参与布局，所以排版、间距、视觉都不受影响；
+   命中测试时它算作所属元素（`document.elementFromPoint` 返回的是宿主元素）。
+   类名跟着控件自己的高度走（size-9 = 36px 等），一眼看得出撑完是多少：
+     tap-9   36×36 → 44×44（顶栏那几枚图标、搜索方框）
+     tap-8   32 高  → 44    （站名）
+     tap-10  40 高  → 44
+     tap-y-6 24 高  → 44 高，横向不动 —— 密排的分段按钮之间别互相盖住
+   地区列表（.globe-reg）行距只有 8px，上下各撑 4px 到 28px 就不重叠了，再大就得动视觉。 */
+.tap { position: relative; }
+.globe-reg { position: relative; }
+.globe-reg::before { content: ""; position: absolute; inset: -4px 0; border-radius: 4px; }
+
+  .globe-panel { grid-template-columns: 1.35fr 0.65fr; }
+
+  .globe-atlas { height: 210px; }
+
+  .globe-side { border-top: 0; border-left: 1px solid var(--border); }
+
+  .globe-reg { min-height: 32px; }
+
+  .globe-rows { max-height: 232px; }

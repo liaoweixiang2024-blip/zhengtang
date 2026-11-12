@@ -19,8 +19,8 @@ function OnlineDot({ online }: { online: boolean }) {
   )
 }
 
-/** 地区 emoji（🇭🇰）→ ISO 国家码（HK），供旗帜文件取图 */
-function regionCode(region: string | null): string {
+/** 地区 emoji（🇭🇰）→ ISO 国家码（HK），供旗帜文件与地球取码 */
+export function regionCode(region: string | null): string {
   if (!region) return ''
   const cps = [...region].map((c) => c.codePointAt(0)!)
   const ris = cps.filter((cp) => cp >= 0x1f1e6 && cp <= 0x1f1ff)
