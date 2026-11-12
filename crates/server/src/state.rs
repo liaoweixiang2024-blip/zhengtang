@@ -52,6 +52,8 @@ pub struct ServerView {
     pub system_info: Option<SystemInfo>,
     pub metrics: Option<RealtimeMetrics>,
     pub traffic_quota_bytes: Option<i64>,
+    /// 本账期已用流量（bytes，按流量重置日对齐的账期）
+    pub month_traffic: i64,
 }
 
 /// 站点设置（DB settings 表，带默认值）。
@@ -184,36 +186,52 @@ impl AppState {
         self.live.iter().map(|e| e.key().clone()).collect()
     }
 
-    /// 构建完整服务器视图（合并注册信息 + 实时状态）。
+    /// 构建完整服务器视图（合并注册信息 + 实时状态 + 本账期流量）。
     pub fn server_views(&self) -> Vec<ServerView> {
         self.store
             .with(|c| {
-                let mut stmt = c.prepare(
-                    "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency, region FROM servers ORDER BY created_at",
-                )?;
-                let rows = stmt
-                    .query_map([], |r| {
-                        Ok((ServerReg {
-                            id: r.get(0)?,
-                            name: r.get(1)?,
-                            group_id: r.get(2)?,
-                            expires_at: r.get(3)?,
-                            public_visible: r.get::<_, i64>(4)? != 0,
-                            traffic_quota_bytes: r.get(5)?,
-                            purchased_at: r.get(7)?,
-                            traffic_reset_day: r.get(8)?,
-                            pay_cycle_months: r.get(9)?,
-                            price_per_cycle: r.get(10)?,
-                            currency: r.get(11)?,
-                            region: r.get(12)?,
-                        }, r.get::<_, i64>(6)?))
-                    })?
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                Ok(rows)
+                let rows = {
+                    let mut stmt = c.prepare(
+                        "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency, region FROM servers ORDER BY created_at",
+                    )?;
+                    let collected: Vec<_> = stmt
+                        .query_map([], |r| {
+                            Ok((ServerReg {
+                                id: r.get(0)?,
+                                name: r.get(1)?,
+                                group_id: r.get(2)?,
+                                expires_at: r.get(3)?,
+                                public_visible: r.get::<_, i64>(4)? != 0,
+                                traffic_quota_bytes: r.get(5)?,
+                                purchased_at: r.get(7)?,
+                                traffic_reset_day: r.get(8)?,
+                                pay_cycle_months: r.get(9)?,
+                                price_per_cycle: r.get(10)?,
+                                currency: r.get(11)?,
+                                region: r.get(12)?,
+                            }, r.get::<_, i64>(6)?))
+                        })?
+                        .collect::<std::result::Result<Vec<_>, _>>()?;
+                    collected
+                };
+                // 本账期流量（按各机流量重置日对齐的 billing_period 归月）
+                let mut traffic = Vec::with_capacity(rows.len());
+                for (reg, _) in &rows {
+                    let period = crate::jobs::billing_period(unix_now(), reg.traffic_reset_day);
+                    let used: i64 = c
+                        .query_row(
+                            "SELECT COALESCE(bytes_in,0) + COALESCE(bytes_out,0) FROM traffic_monthly WHERE server_id = ?1 AND month = ?2",
+                            rusqlite::params![reg.id, period],
+                            |r| r.get(0),
+                        )
+                        .unwrap_or(0);
+                    traffic.push(used);
+                }
+                Ok(rows.into_iter().zip(traffic).collect::<Vec<_>>())
             })
             .unwrap_or_default()
             .into_iter()
-            .map(|(reg, db_last_seen)| {
+            .map(|((reg, db_last_seen), month_traffic)| {
                 let online = self.live.contains_key(&reg.id);
                 let last_seen = if online { unix_now() } else { db_last_seen };
                 ServerView {
@@ -233,6 +251,7 @@ impl AppState {
                     system_info: self.system_info.get(&reg.id).map(|s| s.clone()),
                     metrics: self.metrics.get(&reg.id).map(|m| m.clone()),
                     traffic_quota_bytes: reg.traffic_quota_bytes,
+                    month_traffic,
                 }
             })
             .collect()

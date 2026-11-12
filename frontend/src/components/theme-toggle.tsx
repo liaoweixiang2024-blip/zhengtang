@@ -24,14 +24,17 @@ export function ThemeToggle() {
     return () => mq.removeEventListener('change', onChange)
   }, [mode])
 
-  const icon = mode === 'dark' ? <Moon className="size-[18px]" /> : mode === 'light' ? <Sun className="size-[18px]" /> : <Monitor className="size-[18px]" />
+  const icon =
+    mode === 'dark' ? <Moon className="size-[18px]" strokeWidth={1.5} /> :
+    mode === 'light' ? <Sun className="size-[18px]" strokeWidth={1.5} /> :
+    <Monitor className="size-[18px]" strokeWidth={1.5} />
   return (
     <DropdownMenu>
       <DropdownMenuTrigger title="界面主题" className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[state=open]:bg-accent data-[state=open]:text-foreground">
         {icon}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {([['system', '随系统', <Monitor key="i" className="size-4" />], ['light', '亮色', <Sun key="i" className="size-4" />], ['dark', '暗色', <Moon key="i" className="size-4" />]] as const).map(([m, label, i]) => (
+        {([['system', '随系统', <Monitor key="i" className="size-4" strokeWidth={1.75} />], ['light', '亮色', <Sun key="i" className="size-4" strokeWidth={1.75} />], ['dark', '暗色', <Moon key="i" className="size-4" strokeWidth={1.75} />]] as const).map(([m, label, i]) => (
           <DropdownMenuItem key={m} onClick={() => setMode(m)} className="gap-2">
             {i}
             {label}

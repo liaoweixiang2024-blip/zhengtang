@@ -75,6 +75,7 @@ export interface ServerView {
   system_info: SystemInfo | null
   metrics: RealtimeMetrics | null
   traffic_quota_bytes: number | null
+  month_traffic: number
 }
 
 export type DashboardEvent =

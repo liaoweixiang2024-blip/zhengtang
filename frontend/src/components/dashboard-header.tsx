@@ -8,7 +8,7 @@ import { fmtBytes, fmtSpeed } from '@/lib/format'
 import { CURRENCY_SYMBOL, monthlyCostByCurrency, remainingValueByCurrency } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { Check, Grid2x2, LayoutGrid, Rows3 } from 'lucide-react'
+import { AlignJustify, Check, GalleryVerticalEnd, Grid2x2 } from 'lucide-react'
 
 export type ViewMode = 'detailed' | 'compact' | 'mini'
 
@@ -246,7 +246,11 @@ export function GroupTabs({
 
 /** 卡片形态切换（localStorage 记住偏好） */
 export function ViewModeToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMode) => void }) {
-  const icon = value === 'compact' ? <Rows3 className="size-[18px]" /> : value === 'mini' ? <Grid2x2 className="size-[18px]" /> : <LayoutGrid className="size-[18px]" />
+  // 极简细线：详细=堆叠大卡 / 紧凑=密横线 / 简约=网格
+  const icon =
+    value === 'compact' ? <AlignJustify className="size-[18px]" strokeWidth={1.5} /> :
+    value === 'mini' ? <Grid2x2 className="size-[18px]" strokeWidth={1.5} /> :
+    <GalleryVerticalEnd className="size-[18px]" strokeWidth={1.5} />
   return (
     <DropdownMenu>
       <DropdownMenuTrigger title="卡片形态" className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 data-[state=open]:bg-accent data-[state=open]:text-foreground">

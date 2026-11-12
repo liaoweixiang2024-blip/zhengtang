@@ -126,11 +126,19 @@ export function ServerCard({ server }: { server: ServerView }) {
                   detail={`${fmtBytes(root.used)} / ${fmtBytes(root.total)}`}
                 />
               )}
-              {server.traffic_quota_bytes && server.traffic_quota_bytes > 0 && (
+              {(server.month_traffic > 0 || (server.traffic_quota_bytes ?? 0) > 0) && (
                 <BarRow
                   label="月流量"
-                  pct={Math.min((netTotal / server.traffic_quota_bytes) * 100, 100)}
-                  detail={`${fmtBytes(netTotal)} / ${fmtBytes(server.traffic_quota_bytes)}`}
+                  pct={
+                    server.traffic_quota_bytes
+                      ? Math.min((server.month_traffic / server.traffic_quota_bytes) * 100, 100)
+                      : 0
+                  }
+                  detail={
+                    server.traffic_quota_bytes
+                      ? `${fmtBytes(server.month_traffic)} / ${fmtBytes(server.traffic_quota_bytes)}`
+                      : fmtBytes(server.month_traffic)
+                  }
                 />
               )}
             </div>
