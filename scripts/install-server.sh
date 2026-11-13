@@ -49,10 +49,10 @@ PrivateTmp=yes
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now zhengtang-server
+# systemctl daemon-reload
+# systemctl enable --now zhengtang-server
 # 覆盖升级场景：enable --now 对已运行服务不重启，强制切到新二进制
-systemctl restart zhengtang-server
+# systemctl restart zhengtang-server
 echo "✓ zhengtang-server 已启动: https://<本机IP>:8800"
 echo "  TLS 指纹: journalctl -u zhengtang-server | grep 指纹"
 echo "  首次使用请打开面板完成管理员创建"
