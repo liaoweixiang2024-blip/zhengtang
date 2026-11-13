@@ -12,6 +12,7 @@ mod jobs;
 mod state;
 mod store;
 mod tls;
+mod update;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;

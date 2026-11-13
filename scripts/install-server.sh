@@ -2,13 +2,16 @@
 # zhengtang-server 安装（Linux systemd）
 set -euo pipefail
 
+# root 预检：写 /usr/local/bin 与 systemd 单元都需要 root，晚失败不如早失败
+[ "$(id -u)" = 0 ] || { echo "请用 root 运行（curl -fsSL <url> | sudo sh）"; exit 1; }
+[ "$(uname -s)" = "Linux" ] || { echo "此脚本仅支持 Linux"; exit 1; }
+
 ARCH=$(uname -m)
 case "$ARCH" in
   x86_64) TARGET="x86_64-unknown-linux-musl" ;;
   aarch64|arm64) TARGET="aarch64-unknown-linux-musl" ;;
   *) echo "不支持的架构: $ARCH"; exit 1 ;;
 esac
-[ "$(uname -s)" = "Linux" ] || { echo "此脚本仅支持 Linux"; exit 1; }
 
 VERSION="${ZT_VERSION:-latest}"
 BASE="${ZT_BASE_URL:-https://github.com/liaoweixiang2024-blip/zhengtang/releases}"

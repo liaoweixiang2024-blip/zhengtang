@@ -197,7 +197,9 @@ impl Collector {
                 .map(|c| c.brand().trim().to_string())
                 .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| "unknown".into()),
-            cpu_cores: System::physical_core_count().unwrap_or(0) as u32,
+            // 逻辑核（vCPU）：云主机标称的"N 核"就是它，与 top/任务管理器一致。
+            // 物理核探测（thread_siblings 去重）在部分虚拟化内核下会得出 1，不可靠。
+            cpu_cores: self.sys.cpus().len() as u32,
             mem_total: self.sys.total_memory(),
             swap_total: self.sys.total_swap(),
             disk_total: disks_total,

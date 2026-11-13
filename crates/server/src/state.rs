@@ -67,6 +67,8 @@ pub struct SiteSettings {
     pub public_page_enabled: bool,
     /// 节点地球（点亮世界地图）开关
     pub globe_enabled: bool,
+    /// 在线更新源（空 = GitHub 官方 releases；国内可填 ghfast 镜像前缀）
+    pub update_base: String,
 }
 
 impl Default for SiteSettings {
@@ -77,6 +79,7 @@ impl Default for SiteSettings {
             site_logo: String::new(),
             public_page_enabled: true,
             globe_enabled: true,
+            update_base: String::new(),
         }
     }
 }
@@ -281,6 +284,7 @@ impl AppState {
             if let Some(v) = get("site_logo") { s.site_logo = v; }
             if let Some(v) = get("public_page_enabled") { s.public_page_enabled = v != "0"; }
             if let Some(v) = get("globe_enabled") { s.globe_enabled = v != "0"; }
+            if let Some(v) = get("update_base") { s.update_base = v; }
             Ok(())
         });
         s
@@ -293,6 +297,7 @@ impl AppState {
                 ("site_description", s.site_description.clone()),
                 ("public_page_enabled", if s.public_page_enabled { "1".into() } else { "0".into() }),
                 ("globe_enabled", if s.globe_enabled { "1".into() } else { "0".into() }),
+                ("update_base", s.update_base.clone()),
             ] {
                 c.execute(
                     "INSERT INTO settings (key, value) VALUES (?1, ?2)

@@ -27,6 +27,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/auth/me", get(me))
         .route("/api/auth/totp/setup", post(totp_setup))
         .route("/api/auth/totp/enable", post(totp_enable))
+        // 修改自己的密码（admin/viewer 均可）
+        .route("/api/auth/password", post(change_password))
         // 管理（admin）
         .route("/api/admin/servers", get(admin_servers).post(add_server))
         .route("/api/admin/servers/{id}", patch(update_server).delete(delete_server))
@@ -34,6 +36,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/admin/groups/{id}", delete(delete_group))
         .route("/api/admin/users", get(list_users).post(add_user))
         .route("/api/admin/users/{id}", delete(delete_user))
+        // admin 重置他人密码（目标全部会话下线）
+        .route("/api/admin/users/{id}/reset-password", post(reset_password))
         .route("/api/admin/audit", get(list_audit))
         .route("/api/admin/fingerprint", get(get_fingerprint))
         .route("/api/admin/settings", get(get_settings).put(put_settings))
@@ -42,6 +46,9 @@ pub fn router() -> Router<Arc<AppState>> {
             "/api/admin/logo",
             post(upload_logo).delete(remove_logo).layer(axum::extract::DefaultBodyLimit::max(1024 * 1536)),
         )
+        // 在线更新（探测最新版 / 下载校验替换并热切换）
+        .route("/api/admin/update/check", get(update_check))
+        .route("/api/admin/update/run", post(update_run))
         // 告警
         .route("/api/alerts/events", get(alert_events))
         .route("/api/admin/channels", get(list_channels).post(add_channel))
@@ -226,6 +233,75 @@ fn set_logo_setting(state: &AppState, url: &str) {
     if let Some(f) = old.strip_prefix("/uploads/") {
         let _ = std::fs::remove_file(state.data_dir.join("uploads").join(f));
     }
+}
+
+// ---------- 在线更新 ----------
+
+/// 探测最新版本：302 Location 技巧（不走 api.github.com，镜像前缀也能用）。
+async fn update_check(State(state): State<Arc<AppState>>, jar: CookieJar) -> axum::response::Response {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let target = crate::update::build_target();
+    let base = crate::update::update_base(&state);
+    let latest = match target {
+        Some(t) => crate::update::latest_version(&base, t).await,
+        None => None,
+    };
+    (
+        StatusCode::OK,
+        Json(json!({
+            "current": env!("CARGO_PKG_VERSION"),
+            "latest": latest,          // None = 探测不到（镜像直回 200 / 超时），前端转手动输入
+            "target": target,
+            "base": base,
+            "updating": crate::update::UPDATING.load(std::sync::atomic::Ordering::Relaxed),
+        })),
+    )
+        .into_response()
+}
+
+#[derive(Deserialize)]
+struct UpdateRunBody {
+    version: String,
+}
+
+/// 执行更新：下载 → sha256 校验 → 解包暂存 → 响应写回后延时 exec 热切换。
+/// 版本号必须显式（镜像 latest 缓存不可信）。
+async fn update_run(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Json(body): Json<UpdateRunBody>,
+) -> axum::response::Response {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    if crate::update::UPDATING
+        .swap(true, std::sync::atomic::Ordering::Relaxed)
+    {
+        return err(StatusCode::CONFLICT, "已有一次更新在进行中");
+    }
+    let staged = match crate::update::download(&state, &body.version).await {
+        Ok(p) => p,
+        Err(e) => {
+            crate::update::UPDATING.store(false, std::sync::atomic::Ordering::Relaxed);
+            return err(StatusCode::BAD_GATEWAY, &e);
+        }
+    };
+    tracing::info!(version = %body.version, "在线更新包就绪，1.5s 后热切换");
+    // 先让本函数把 200 响应写回连接，再在后台 exec 替换进程镜像
+    tokio::task::spawn_blocking(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        if let Err(e) = crate::update::replace_and_exec(&staged) {
+            tracing::error!(%e, "热切换失败（旧二进制继续运行，未损坏）");
+            crate::update::UPDATING.store(false, std::sync::atomic::Ordering::Relaxed);
+        }
+    });
+    (
+        StatusCode::OK,
+        Json(json!({ "ok": true, "version": body.version, "note": "热切换中，几秒内服务恢复" })),
+    )
+        .into_response()
 }
 
 /// 登录用户可见的分组（admin 全量；viewer 按授权过滤）
@@ -417,6 +493,97 @@ async fn me(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResp
         Some(u) => Json(json!({ "username": u.username, "role": u.role, "group_ids": u.group_ids })).into_response(),
         None => err(StatusCode::UNAUTHORIZED, "未登录"),
     }
+}
+
+// ---------- 密码 ----------
+
+#[derive(Deserialize)]
+struct ChangePasswordBody {
+    old_password: String,
+    new_password: String,
+}
+
+/// 修改自己的密码：验旧 → 换新 → 清掉本用户的其他会话（当前会话保留，
+/// 免得改完密码立刻被踢回登录页）。任何登录用户可用。
+async fn change_password(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    jar: CookieJar,
+    Json(body): Json<ChangePasswordBody>,
+) -> axum::response::Response {
+    let Some(user) = auth::current_user(&state, &jar) else {
+        return err(StatusCode::UNAUTHORIZED, "未登录");
+    };
+    if body.new_password.len() < 8 {
+        return err(StatusCode::BAD_REQUEST, "新密码至少 8 位");
+    }
+    let cur_token = jar
+        .get(auth::SESSION_COOKIE)
+        .map(|c| c.value().to_string())
+        .unwrap_or_default();
+    let hash: Option<String> = state
+        .store
+        .with(|c| {
+            Ok(c.query_row("SELECT password_hash FROM users WHERE id = ?1", [user.id], |r| r.get(0)).ok())
+        })
+        .ok()
+        .flatten();
+    let Some(hash) = hash else {
+        return err(StatusCode::NOT_FOUND, "用户不存在");
+    };
+    if !auth::verify_password(&hash, &body.old_password) {
+        auth::audit_state(&state, Some(&user), "password_fail", "原密码错误", &auth::client_ip(&headers, Some(peer)));
+        return err(StatusCode::FORBIDDEN, "原密码不正确");
+    }
+    let new_hash = match auth::hash_password(&body.new_password) {
+        Ok(h) => h,
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("密码哈希失败：{e}")),
+    };
+    let _ = state.store.with(|c| {
+        c.execute("UPDATE users SET password_hash = ?1 WHERE id = ?2", rusqlite::params![new_hash, user.id])?;
+        c.execute(
+            "DELETE FROM sessions WHERE user_id = ?1 AND token != ?2",
+            rusqlite::params![user.id, cur_token],
+        )?;
+        Ok(())
+    });
+    auth::audit_state(&state, Some(&user), "password_change", "修改了自己的密码", &auth::client_ip(&headers, Some(peer)));
+    (StatusCode::OK, Json(json!({ "ok": true }))).into_response()
+}
+
+/// admin 重置他人密码：目标用户全部会话下线（改完必须用新密码重新登录）。
+async fn reset_password(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    jar: CookieJar,
+    Path(id): Path<i64>,
+    Json(body): Json<ChangePasswordBody>,
+) -> axum::response::Response {
+    let Ok(admin) = require_admin(&state, &jar) else {
+        return err(StatusCode::FORBIDDEN, "需要管理员权限");
+    };
+    if body.new_password.len() < 8 {
+        return err(StatusCode::BAD_REQUEST, "新密码至少 8 位");
+    }
+    let new_hash = match auth::hash_password(&body.new_password) {
+        Ok(h) => h,
+        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("密码哈希失败：{e}")),
+    };
+    let updated = state
+        .store
+        .with(|c| {
+            let n = c.execute("UPDATE users SET password_hash = ?1 WHERE id = ?2", rusqlite::params![new_hash, id])?;
+            c.execute("DELETE FROM sessions WHERE user_id = ?1", [id])?;
+            Ok(n)
+        })
+        .unwrap_or(0);
+    if updated == 0 {
+        return err(StatusCode::NOT_FOUND, "用户不存在");
+    }
+    auth::audit_state(&state, Some(&admin), "password_reset", &format!("重置用户 {id} 的密码"), &auth::client_ip(&headers, Some(peer)));
+    (StatusCode::OK, Json(json!({ "ok": true }))).into_response()
 }
 
 // ---------- TOTP ----------
@@ -1319,6 +1486,8 @@ struct SettingsBody {
     site_description: Option<String>,
     public_page_enabled: Option<bool>,
     globe_enabled: Option<bool>,
+    /// 在线更新源（空 = GitHub 官方；长度上限防滥用）
+    update_base: Option<String>,
 }
 
 async fn put_settings(
@@ -1350,6 +1519,17 @@ async fn put_settings(
     }
     if let Some(v) = body.public_page_enabled {
         s.public_page_enabled = v;
+    }
+    if let Some(v) = body.update_base {
+        let v = v.trim().to_string();
+        if v.len() > 256 {
+            return err(StatusCode::BAD_REQUEST, "更新源地址过长");
+        }
+        // 只接受 https:// 前缀（空串恢复默认）
+        if !v.is_empty() && !v.starts_with("https://") && !v.starts_with("http://") {
+            return err(StatusCode::BAD_REQUEST, "更新源必须以 http(s):// 开头");
+        }
+        s.update_base = v;
     }
     state.set_settings(&s);
     auth::audit_state(&state, Some(&admin), "settings", "更新站点设置", &auth::client_ip(&headers, Some(peer)));

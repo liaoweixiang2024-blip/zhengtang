@@ -5,7 +5,7 @@ import { Alerts } from '@/pages/alerts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { fmtBytes } from '@/lib/format'
 import { CYCLE_LABEL, CURRENCY_SYMBOL, fmtCost, monthlyCostByCurrency } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
-import { Bell, ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2 } from 'lucide-react'
+import { Bell, ListTree, Pencil, Plus, Radar, RefreshCw, ScrollText, Server, Settings, Trash2, Users, FolderGit2, KeyRound } from 'lucide-react'
 
 interface Group { id: number; name: string }
 interface User { id: number; username: string; role: string; totp_enabled: boolean }
@@ -28,6 +28,7 @@ export const NAV = [
   { key: 'audit', label: '审计日志', icon: ScrollText },
   { key: 'alerts', label: '告警中心', icon: Bell },
   { key: 'settings', label: '设置', icon: Settings },
+  { key: 'update', label: '在线更新', icon: RefreshCw },
 ] as const
 
 export type NavKey = (typeof NAV)[number]['key']
@@ -79,6 +80,7 @@ export function Admin({ tab, onTabChange, navigate }: {
         {active === 'audit' && <AuditTab />}
         {active === 'alerts' && <Alerts isAdmin />}
         {active === 'settings' && <SettingsTab />}
+        {active === 'update' && <UpdateTab />}
       </div>
     </div>
   )
@@ -354,6 +356,9 @@ function UsersTab() {
   const [groupIds, setGroupIds] = useState<number[]>([])
   const [error, setError] = useState('')
   const [delUser, setDelUser] = useState<User | null>(null)
+  const [resetUser, setResetUser] = useState<User | null>(null)
+  const [newPass, setNewPass] = useState('')
+  const [resetMsg, setResetMsg] = useState('')
 
   const load = useCallback(() => {
     fetch('/api/admin/users').then((r) => r.json()).then((d) => setUsers(d.users ?? []))
@@ -420,9 +425,23 @@ function UsersTab() {
                 <TableCell>{u.role === 'admin' ? '管理员' : '观察者'}</TableCell>
                 <TableCell>{u.totp_enabled ? '已启用' : '未启用'}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon" title="删除" onClick={() => setDelUser(u)}>
-                    <Trash2 className="size-4 text-muted-foreground" />
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="重置密码"
+                      onClick={() => {
+                        setResetUser(u)
+                        setNewPass('')
+                        setResetMsg('')
+                      }}
+                    >
+                      <KeyRound className="size-4 text-muted-foreground" />
+                    </Button>
+                    <Button variant="ghost" size="icon" title="删除" onClick={() => setDelUser(u)}>
+                      <Trash2 className="size-4 text-muted-foreground" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -440,6 +459,51 @@ function UsersTab() {
               load()
             }}
           />
+        )}
+        {resetUser && (
+          <Dialog open onOpenChange={(v) => !v && setResetUser(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>重置 {resetUser.username} 的密码</DialogTitle>
+                <DialogDescription>
+                  重置后该账号全部会话立即下线，需用新密码重新登录。
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Input
+                  type="password"
+                  value={newPass}
+                  onChange={(e) => setNewPass(e.target.value)}
+                  placeholder="新密码（≥8 位）"
+                  autoFocus
+                />
+                {resetMsg && <p className="text-sm text-destructive">{resetMsg}</p>}
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={async () => {
+                    if (newPass.length < 8) {
+                      setResetMsg('新密码至少 8 位')
+                      return
+                    }
+                    const res = await fetch(`/api/admin/users/${resetUser.id}/reset-password`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ new_password: newPass, old_password: '' }),
+                    })
+                    if (!res.ok) {
+                      const d = await res.json().catch(() => ({}))
+                      setResetMsg(d.error ?? '重置失败')
+                      return
+                    }
+                    setResetUser(null)
+                  }}
+                >
+                  重置
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </CardContent>
     </Card>
@@ -644,6 +708,7 @@ function SettingsTab() {
   const [logoBusy, setLogoBusy] = useState(false)
   const [publicEnabled, setPublicEnabled] = useState(true)
   const [globeEnabled, setGlobeEnabled] = useState(true)
+  const [updateBase, setUpdateBase] = useState('')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [loaded, setLoaded] = useState(false)
@@ -659,6 +724,7 @@ function SettingsTab() {
         setLogo(d.site_logo ?? '')
         setPublicEnabled(d.public_page_enabled !== false)
         setGlobeEnabled(d.globe_enabled !== false)
+        setUpdateBase(d.update_base ?? '')
         setLoaded(true)
       })
   }, [])
@@ -703,6 +769,7 @@ function SettingsTab() {
         site_description: description,
         public_page_enabled: publicEnabled,
         globe_enabled: globeEnabled,
+        update_base: updateBase.trim(),
       }),
     })
     if (!res.ok) {
@@ -786,6 +853,18 @@ function SettingsTab() {
             </div>
             <Switch checked={publicEnabled} onCheckedChange={setPublicEnabled} />
           </div>
+          <div className="space-y-2">
+            <Label>在线更新源</Label>
+            <Input
+              value={updateBase}
+              onChange={(e) => setUpdateBase(e.target.value)}
+              placeholder="留空 = GitHub 官方 releases"
+            />
+            <p className="text-xs text-muted-foreground">
+              「在线更新」页的下载地址。GitHub 直连不稳时可填镜像前缀，如
+              https://ghfast.top/https://github.com/liaoweixiang2024-blip/zhengtang/releases
+            </p>
+          </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           {saved && <p className="text-sm text-emerald-600">已保存</p>}
           <Button type="submit">保存设置</Button>
@@ -795,6 +874,132 @@ function SettingsTab() {
   )
 }
 
+
+// ---------- 在线更新 ----------
+
+function UpdateTab() {
+  const [info, setInfo] = useState<{ current: string; latest: string | null; target: string | null; base: string } | null>(null)
+  const [version, setVersion] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+
+  const check = useCallback(async () => {
+    setChecking(true)
+    setError('')
+    const res = await fetch('/api/admin/update/check')
+    const d = await res.json().catch(() => ({}))
+    setChecking(false)
+    if (!res.ok) {
+      setError(d.error ?? '检查失败')
+      return
+    }
+    setInfo(d)
+    if (d.latest) setVersion(d.latest)
+  }, [])
+  useEffect(() => { check() }, [check])
+
+  const run = async () => {
+    setBusy(true)
+    setError('')
+    setDone(false)
+    const res = await fetch('/api/admin/update/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setBusy(false)
+      setError(d.error ?? '更新失败')
+      return
+    }
+    // 热切换中（exec 替换进程镜像，连接闪断属预期）：轮询直到版本号变化
+    const want = version.replace(/^v/, '')
+    const poll = setInterval(async () => {
+      try {
+        const r = await fetch('/api/status')
+        if (!r.ok) return
+        const s = await r.json()
+        if (s.version === want) {
+          clearInterval(poll)
+          setBusy(false)
+          setDone(true)
+          // 前端资源随二进制一起换了，稍候自动整页刷新
+          setTimeout(() => location.reload(), 1500)
+        }
+      } catch {
+        /* 热切换瞬间断连，继续轮询 */
+      }
+    }, 3000)
+    setTimeout(() => clearInterval(poll), 180000)
+  }
+
+  const hasNew = info?.latest && `v${info.current}` !== info.latest
+  return (
+    <Card className="py-4">
+      <CardHeader><CardTitle className="text-base">在线更新</CardTitle></CardHeader>
+      <CardContent className="max-w-lg space-y-4">
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">当前版本</div>
+            <div className="tnum mt-1 font-medium">v{info?.current ?? '…'}</div>
+          </div>
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">最新版本</div>
+            <div className="tnum mt-1 font-medium">
+              {checking ? '检查中…' : info ? (info.latest ?? '探测不到') : '…'}
+            </div>
+          </div>
+        </div>
+
+        {hasNew && (
+          <p className="text-sm text-emerald-600">有新版本 {info.latest} 可用</p>
+        )}
+        {info && !info.latest && (
+          <p className="text-xs text-muted-foreground">
+            探测不到最新版本（更新源直回了下载内容或超时）——不影响更新，
+            在下方输入要更新到的版本号即可（如 v0.2.3）
+          </p>
+        )}
+
+        <div className="space-y-2">
+          <Label>目标版本</Label>
+          <div className="flex gap-2">
+            <Input value={version} onChange={(e) => setVersion(e.target.value.trim())} placeholder="v0.2.3" className="tnum w-36" />
+            <Button type="button" variant="outline" onClick={check} disabled={checking || busy}>
+              {checking ? '检查中…' : '重新检查'}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            更新源：{info?.base ?? '…'}
+            <br />
+            GitHub 直连不稳时，到「设置」把更新源换成镜像前缀（如 ghfast.top）
+          </p>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {busy ? (
+          <p className="text-sm text-muted-foreground">
+            正在更新到 {version || '…'}：下载校验后自动热切换，服务中断几秒，
+            完成后本页自动刷新…
+          </p>
+        ) : done ? (
+          <p className="text-sm text-emerald-600">✓ 已更新到 {version}，正在刷新…</p>
+        ) : (
+          <Button type="button" onClick={run} disabled={!version || checking}>
+            更新到 {version || '指定版本'}
+          </Button>
+        )}
+        <p className="text-xs text-muted-foreground">
+          更新流程：下载 release 包 → sha256 校验 → 原子替换二进制 → 无缝热切换（进程不重启、数据不丢）；
+          失败时旧版本继续运行。
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
 
 // ---------- 服务器编辑（到期/购买/流量配额/重置日/分组/公开展示） ----------
 
