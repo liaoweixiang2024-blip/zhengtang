@@ -19,3 +19,6 @@ frontend/dist/
 
 # OS
 .DS_Store
+
+# 崩溃转储
+core
