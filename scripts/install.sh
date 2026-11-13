@@ -31,6 +31,8 @@ case "$ARCH" in
   *) echo "不支持的架构: $ARCH"; exit 1 ;;
 esac
 [ "$(uname -s)" = "Linux" ] || { echo "此脚本仅支持 Linux（macOS/Windows 请手动下载）"; exit 1; }
+# 写 /usr/local/bin 与 systemd 需要 root
+[ "$(id -u)" = 0 ] || { echo "请用 root 运行（curl ... | sudo sh）"; exit 1; }
 
 # ---------- 下载 ----------
 VERSION="${ZT_VERSION:-latest}"

@@ -468,7 +468,7 @@ async fn add_server(
         // 短安装命令：面板注入参数，目标机免参数执行。
         // base 可能是 wss:// 口径（前端为 agent 连接做的转换）；curl 下载必须用 http(s)
         "install_cmd_short": format!(
-            "curl -kfsSL {}/a/{} | sh",
+            "curl -kfsSL {}/a/{} | sudo sh",
             base.replace("wss://", "https://").replace("ws://", "http://"),
             install_token
         ),
