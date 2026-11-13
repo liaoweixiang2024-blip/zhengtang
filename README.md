@@ -21,7 +21,7 @@
 
 ```bash
 # 方式一：安装脚本（Linux systemd）
-curl -fsSL https://github.com/zhengtang/zhengtang/releases/latest/download/install-server.sh | sudo bash
+curl -fsSL https://github.com/liaoweixiang2024-blip/zhengtang/releases/latest/download/install-server.sh | sudo bash
 
 # 方式二：直接运行（任何平台）
 ./zhengtang-server serve

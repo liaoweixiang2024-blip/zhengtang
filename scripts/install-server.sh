@@ -11,7 +11,7 @@ esac
 [ "$(uname -s)" = "Linux" ] || { echo "此脚本仅支持 Linux"; exit 1; }
 
 VERSION="${ZT_VERSION:-latest}"
-BASE="${ZT_BASE_URL:-https://github.com/zhengtang/zhengtang/releases}"
+BASE="${ZT_BASE_URL:-https://github.com/liaoweixiang2024-blip/zhengtang/releases}"
 if [ "$VERSION" = "latest" ]; then
   URL="$BASE/latest/download/zhengtang-server-$TARGET.tar.gz"
 else

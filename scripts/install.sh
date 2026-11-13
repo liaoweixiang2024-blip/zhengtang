@@ -34,7 +34,7 @@ esac
 
 # ---------- 下载 ----------
 VERSION="${ZT_VERSION:-latest}"
-BASE="${ZT_BASE_URL:-https://github.com/zhengtang/zhengtang/releases}"
+BASE="${ZT_BASE_URL:-https://github.com/liaoweixiang2024-blip/zhengtang/releases}"
 if [ "$VERSION" = "latest" ]; then
   URL="$BASE/latest/download/zhengtang-agent-$TARGET.tar.gz"
 else
@@ -95,7 +95,7 @@ cat > /usr/local/bin/zt-agent <<'ZTEOF'
 #!/usr/bin/env bash
 # zhengtang-agent 快捷管理
 set -euo pipefail
-BASE_URL="${ZT_BASE_URL:-https://github.com/zhengtang/zhengtang/releases}"
+BASE_URL="${ZT_BASE_URL:-https://github.com/liaoweixiang2024-blip/zhengtang/releases}"
 case "$1" in
   status)  systemctl status zhengtang-agent --no-pager ;;
   log|logs) journalctl -u zhengtang-agent -f ;;
