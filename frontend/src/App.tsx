@@ -205,16 +205,14 @@ function Main(props: {
         </Shell>
       )
     }
-    // 后台 = 官方 dashboard-01 全屏布局（自带顶栏/侧栏），不走全站 Shell
     return (
-      <Admin
-        tab={parseAdminTab(path.split('?')[1] ?? '')}
-        onTabChange={(k) => navigate(`/admin?tab=${k}`, true)}
-        navigate={navigate}
-        siteName={siteName}
-        me={me}
-        onLogout={onLogout}
-      />
+      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+        <Admin
+          tab={parseAdminTab(path.split('?')[1] ?? '')}
+          onTabChange={(k) => navigate(`/admin?tab=${k}`, true)}
+          navigate={navigate}
+        />
+      </Shell>
     )
   }
 

@@ -9,11 +9,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { TooltipProvider } from '@/components/ui/tooltip'
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
-import { Separator } from '@/components/ui/separator'
-import { ThemeToggle } from '@/components/theme-toggle'
-import { UserMenu } from '@/components/top-bar'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes } from '@/lib/format'
@@ -43,13 +38,10 @@ export function parseAdminTab(query: string): NavKey {
   return NAV.some((n) => n.key === t) ? (t as NavKey) : 'servers'
 }
 
-export function Admin({ tab, onTabChange, navigate, siteName, me, onLogout }: {
+export function Admin({ tab, onTabChange, navigate }: {
   tab?: NavKey
   onTabChange?: (k: NavKey) => void
   navigate?: (h: string) => void
-  siteName?: string
-  me?: { username: string; role: string }
-  onLogout?: () => void
 }) {
   const [inner, setInner] = useState<NavKey>('servers')
   const active = tab ?? inner
@@ -57,70 +49,38 @@ export function Admin({ tab, onTabChange, navigate, siteName, me, onLogout }: {
     setInner(k)
     onTabChange?.(k)
   }
-  const go = (h: string) => (navigate ? navigate(h) : location.assign(h))
-
-  // shadcn 官方 dashboard-01 块布局：侧栏贴视口左缘（右描边分隔，可折叠成图标列），
-  // 顶栏长在内容区内部（折叠按钮 + 站名回首页 + 账号/主题），内容列限宽 1280 居中
   return (
-    <SidebarProvider>
-      <TooltipProvider delayDuration={200}>
-        <Sidebar collapsible="icon">
-          <SidebarHeader>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton size="lg" onClick={() => go('/')} tooltip="返回首页">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                    <Server className="size-4" />
-                  </div>
-                  <div className="grid flex-1 text-left leading-tight">
-                    <span className="truncate font-semibold">{siteName ?? 'zhengtang'}</span>
-                    <span className="truncate text-xs text-muted-foreground">后台管理</span>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>管理</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {NAV.map(({ key, label, icon: Icon }) => (
-                    <SidebarMenuItem key={key}>
-                      <SidebarMenuButton isActive={active === key} tooltip={label} onClick={() => select(key)}>
-                        <Icon />
-                        <span>{label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter />
-        </Sidebar>
-      </TooltipProvider>
-      <SidebarInset>
-        {/* 官方 dashboard 顶栏：折叠按钮 + 分隔线 + 页名；右侧账号/主题 */}
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 !h-4" />
-          <span className="text-sm font-medium">{NAV.find((n) => n.key === active)?.label}</span>
-          <div className="ml-auto flex items-center gap-1">
-            {me && onLogout && <UserMenu me={{ ...me, group_ids: [] }} navigate={go} onLogout={onLogout} />}
-            <ThemeToggle />
-          </div>
-        </header>
-        <div className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6">
-          {active === 'servers' && <ServersTab navigate={navigate} />}
-          {active === 'groups' && <GroupsTab />}
-          {active === 'users' && <UsersTab />}
-          {active === 'audit' && <AuditTab />}
-          {active === 'alerts' && <Alerts isAdmin />}
-          {active === 'settings' && <SettingsTab />}
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="flex flex-col gap-6 md:flex-row">
+      {/* 侧边导航（monitor-probe 同款）：窄屏横向滚动，宽屏左列 44 宽；激活=浅底半粗 */}
+      <nav className="flex gap-1 overflow-x-auto pb-1 md:w-44 md:shrink-0 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0">
+        {NAV.map(({ key, label, icon: Icon }) => {
+          const isActive = active === key
+          return (
+            <button
+              key={key}
+              onClick={() => select(key)}
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm outline-none transition-colors ${
+                isActive
+                  ? 'bg-secondary font-medium'
+                  : 'text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Icon className="size-4" />
+              {label}
+            </button>
+          )
+        })}
+      </nav>
+      <div className="min-w-0 flex-1">
+        {active === 'servers' && <ServersTab navigate={navigate} />}
+        {active === 'groups' && <GroupsTab />}
+        {active === 'users' && <UsersTab />}
+        {active === 'audit' && <AuditTab />}
+        {active === 'alerts' && <Alerts isAdmin />}
+        {active === 'settings' && <SettingsTab />}
+      </div>
+    </div>
   )
 }
 
