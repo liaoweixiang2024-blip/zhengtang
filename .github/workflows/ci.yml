@@ -77,11 +77,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - name: 安装 musl 交叉工具（Linux）
+      # Linux musl 交叉用 cross（自带 musl 交叉工具链；armv7 无 apt 工具链）
+      - name: 安装 cross（Linux）
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
       - name: 构建前端
         working-directory: frontend
         run: |
@@ -89,9 +90,11 @@ jobs:
           npm run build
       - name: 构建（release + 目标三元组）
         run: |
+          BUILD="cargo build"
+          if [ "${{ runner.os }}" = "Linux" ]; then BUILD="cross build"; fi
           for bin in ${{ matrix.artifacts }}; do
             package=$(echo $bin | sed 's/zhengtang-//')
-            cargo build --release -p "$package" --target ${{ matrix.target }}
+            $BUILD --release -p "$package" --target ${{ matrix.target }}
           done
       - name: 打包
         run: |
