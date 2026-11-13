@@ -71,6 +71,22 @@ zt-agent uninstall   # 卸载（删服务/二进制/含私钥的配置，需输�
 等价的 systemd 原生命令：`systemctl status|restart|stop zhengtang-agent`、
 `journalctl -u zhengtang-agent -f`。
 
+### GitHub 不可达 / 内网环境
+
+两种方案任选：
+
+1. **面板自托管 agent（推荐，目标机完全不依赖 GitHub）**：把 Releases 里的
+   agent tar.gz 下载后放到面板数据目录 data/agents/（如
+   data/agents/zhengtang-agent-x86_64-unknown-linux-musl.tar.gz）。之后
+   「添加服务器」生成的安装命令会自动改从面板下载二进制（脚本自动探测）。
+2. **镜像加速**：安装命令前加环境变量指向镜像，如
+   ZT_BASE_URL=https://ghfast.top/https://github.com/liaoweixiang2024-blip/zhengtang/releases
+
+### 端口要求
+
+- **面板**：入站放行 8800/TCP（浏览器与 agent 都走这一个口）
+- **被监控机**：**零入站端口**——agent 只主动外连，从不监听（安全设计）
+
 ### 私有部署的安装脚本分发
 
 服务端可反代 `/install.sh`（放入 `data/` 目录由你的反代/对象存储提供），release 页也带脚本。

@@ -97,6 +97,8 @@ pub struct ServerReg {
 
 pub struct AppState {
     pub store: Arc<Store>,
+    /// 数据目录（证书/agents 自托管下载目录所在）
+    pub data_dir: std::path::PathBuf,
     /// 登录防爆破（指数退避）
     pub brute: crate::auth::BruteGuard,
     /// agent_id → 实时状态
@@ -116,10 +118,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(store: Arc<Store>, metrics_interval_secs: u32) -> Result<Self, anyhow::Error> {
+    pub fn new(store: Arc<Store>, data_dir: std::path::PathBuf, metrics_interval_secs: u32) -> Result<Self, anyhow::Error> {
         let (dash_tx, _) = broadcast::channel(256);
         let state = Self {
             store,
+            data_dir,
             brute: Default::default(),
             live: DashMap::new(),
             metrics: DashMap::new(),

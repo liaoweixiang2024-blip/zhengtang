@@ -131,7 +131,7 @@ fn add_server(data_dir: &PathBuf, name: &str, server_url: &str) -> Result<()> {
 async fn serve(data_dir: &PathBuf, listen: &str, http: bool, metrics_interval: u32) -> Result<()> {
     let db_path = data_dir.join("zhengtang.db");
     let store = Arc::new(store::Store::open(&db_path)?);
-    let state = Arc::new(AppState::new(store, metrics_interval)?);
+    let state = Arc::new(AppState::new(store, data_dir.clone(), metrics_interval)?);
     jobs::spawn(state.clone());
     alert::spawn(state.clone());
 

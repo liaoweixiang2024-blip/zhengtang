@@ -35,7 +35,10 @@ esac
 # ---------- 下载 ----------
 VERSION="${ZT_VERSION:-latest}"
 BASE="${ZT_BASE_URL:-https://github.com/liaoweixiang2024-blip/zhengtang/releases}"
-if [ "$VERSION" = "latest" ]; then
+if [ -n "${ZT_DL_BASE:-}" ]; then
+  # 面板自托管（data/agents/）：无需访问 GitHub
+  URL="${ZT_DL_BASE%/}/zhengtang-agent-$TARGET.tar.gz"
+elif [ "$VERSION" = "latest" ]; then
   URL="$BASE/latest/download/zhengtang-agent-$TARGET.tar.gz"
 else
   URL="$BASE/download/$VERSION/zhengtang-agent-$TARGET.tar.gz"
@@ -43,7 +46,9 @@ fi
 echo "下载 $URL"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-curl -fsSL "$URL" -o "$TMP/agent.tar.gz"
+CURL_FLAGS="-fsSL"
+case "$URL" in https://*) [ -n "${ZT_DL_BASE:-}" ] && CURL_FLAGS="-kfsSL" ;; esac
+curl $CURL_FLAGS "$URL" -o "$TMP/agent.tar.gz"
 tar -xzf "$TMP/agent.tar.gz" -C "$TMP"
 
 # ---------- 安装 ----------

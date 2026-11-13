@@ -23,6 +23,34 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/public/servers", get(public_servers))
         // 短安装命令：令牌换取已注入参数的安装脚本（匿名；令牌 24h 限时）
         .route("/a/{token}", get(install_script))
+        // agent 二进制自托管下载（data/agents/，国内/GitHub 不可达环境用）
+        .route("/dl/{file}", get(download_agent))
+}
+
+/// 从 data/agents/ 下发 agent 包（仅允许 zhengtang-agent-*.tar.gz 文件名）。
+async fn download_agent(
+    State(state): State<Arc<AppState>>,
+    Path(file): Path<String>,
+) -> impl IntoResponse {
+    let ok = file.starts_with("zhengtang-agent-")
+        && file.ends_with(".tar.gz")
+        && !file.contains("..")
+        && !file.contains('/');
+    if !ok {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    let path = state.data_dir.join("agents").join(&file);
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => (
+            [
+                (axum::http::header::CONTENT_TYPE, "application/gzip"),
+                (axum::http::header::CACHE_CONTROL, "public, max-age=3600"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "面板未自托管该文件（把 release 的 agent tar.gz 放入 data/agents/ 后重试）").into_response(),
+    }
 }
 
 async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -265,10 +293,24 @@ async fn install_script(
     let ws = format!("{}/ws/agent", base.trim_end_matches('/').replace("https://", "wss://").replace("http://", "ws://"));
     let fingerprint = crate::tls::FINGERPRINT.get().map(|f| f.to_string()).unwrap_or_default();
 
+    // 自托管 agent：data/agents/ 有任一 agent 包时，脚本改从面板下载（无需 GitHub）
+    let has_local_agents = std::fs::read_dir(state.data_dir.join("agents"))
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .any(|e| e.file_name().to_string_lossy().starts_with("zhengtang-agent-"))
+        })
+        .unwrap_or(false);
+    let dl_base = if has_local_agents {
+        format!("\nZT_DL_BASE='{base}/dl'")
+    } else {
+        String::new()
+    };
+
     // 头部注入连接参数，其后为通用安装脚本（脚本内 ZT_* 为默认值，命令行参数可覆盖）
     let tpl = include_str!("../../../scripts/install.sh");
     let script = format!(
-        "#!/usr/bin/env bash\n# ===== 面板注入（一次性安装令牌，勿外传）=====\nZT_SERVER='{ws}'\nZT_ID='{agent_id}'\nZT_KEY='{secret}'\nZT_FP='{fingerprint}'\n{tpl}"
+        "#!/usr/bin/env bash\n# ===== 面板注入（一次性安装令牌，勿外传）=====\nZT_SERVER='{ws}'\nZT_ID='{agent_id}'\nZT_KEY='{secret}'\nZT_FP='{fingerprint}'{dl_base}\n{tpl}"
     );
     (
         [(axum::http::header::CONTENT_TYPE, "text/x-shellscript; charset=utf-8")],
