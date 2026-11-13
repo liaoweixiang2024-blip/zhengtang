@@ -37,6 +37,11 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/admin/audit", get(list_audit))
         .route("/api/admin/fingerprint", get(get_fingerprint))
         .route("/api/admin/settings", get(get_settings).put(put_settings))
+        // 站点 LOGO（multipart 上传；body 上限 1.5MB）
+        .route(
+            "/api/admin/logo",
+            post(upload_logo).delete(remove_logo).layer(axum::extract::DefaultBodyLimit::max(1024 * 1536)),
+        )
         // 告警
         .route("/api/alerts/events", get(alert_events))
         .route("/api/admin/channels", get(list_channels).post(add_channel))
@@ -57,7 +62,7 @@ pub fn router() -> Router<Arc<AppState>> {
 }
 
 /// 判断是否私网/回环地址（无法公网定位）。
-fn is_private_ip(ip: &str) -> bool {
+pub(crate) fn is_private_ip(ip: &str) -> bool {
     let ip = ip.trim();
     if ip == "::1" || ip.starts_with("fe80:") || ip.starts_with("fc") || ip.starts_with("fd") {
         return true;
@@ -105,7 +110,13 @@ async fn detect_region(
         return err(StatusCode::BAD_REQUEST, "该服务器还没有连接记录，无法识别");
     };
     if is_private_ip(&ip) {
-        return err(StatusCode::BAD_REQUEST, &format!("连接 IP {ip} 是内网地址，无法识别地区（请手动选择）"));
+        return err(
+            StatusCode::BAD_REQUEST,
+            &format!(
+                "连接 IP {ip} 是内网地址，无法识别地区。\n面板与 agent 之间经过了内网穿透（如 frp）或反代，真实公网 IP 没有传到面板；\
+                 反代场景可在反代层加 X-Forwarded-For 头，纯 TCP 穿透场景请直接在地区下拉中手动选择。"
+            ),
+        );
     }
     // ip-api.com 免费接口（无 key，仅传 IP 与语言参数；5s 超时）
     let url = format!("http://ip-api.com/json/{ip}?fields=status,countryCode,country&lang=zh-CN");
@@ -142,6 +153,79 @@ async fn detect_region(
     }
     tracing::info!(server = %id, ip = %ip, region = %region, "地区自动识别完成");
     (StatusCode::OK, Json(json!({ "ok": true, "region": region }))).into_response()
+}
+
+// ---------- 站点 LOGO ----------
+
+/// LOGO 上传：multipart 单文件；位图白名单（png/jpg/webp/gif/ico，≤1MB）。
+/// 存 data/uploads/logo-{hex}.{ext}，写入 settings.site_logo 并清掉旧文件。
+/// 不收 SVG：同源直开 SVG 可执行脚本，位图无此面。
+async fn upload_logo(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    mut mp: axum::extract::Multipart,
+) -> axum::response::Response {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let field = match mp.next_field().await {
+        Ok(Some(f)) => f,
+        _ => return err(StatusCode::BAD_REQUEST, "缺少上传文件（multipart 字段 file）"),
+    };
+    let filename = field.file_name().unwrap_or("").to_lowercase();
+    let ext = filename.rsplit('.').next().unwrap_or("").to_string();
+    const ALLOWED: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "ico"];
+    if !ALLOWED.contains(&ext.as_str()) {
+        return err(StatusCode::BAD_REQUEST, "仅支持 png / jpg / webp / gif / ico 位图");
+    }
+    let data = match field.bytes().await {
+        Ok(d) => d,
+        Err(e) => return err(StatusCode::BAD_REQUEST, &format!("读取失败：{e}")),
+    };
+    if data.is_empty() || data.len() > 1024 * 1024 {
+        return err(StatusCode::BAD_REQUEST, "文件大小需在 1KB - 1MB 之间");
+    }
+    let mut rnd = [0u8; 4];
+    rand::rng().fill_bytes(&mut rnd);
+    let name = format!("logo-{}.{ext}", data_encoding::HEXLOWER.encode(&rnd));
+    let dir = state.data_dir.join("uploads");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("创建目录失败：{e}"));
+    }
+    if let Err(e) = std::fs::write(dir.join(&name), &data) {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("写入失败：{e}"));
+    }
+    set_logo_setting(&state, &format!("/uploads/{name}"));
+    (StatusCode::OK, Json(json!({ "ok": true, "logo": format!("/uploads/{name}") }))).into_response()
+}
+
+/// 恢复默认 LOGO：清设置并删文件。
+async fn remove_logo(State(state): State<Arc<AppState>>, jar: CookieJar) -> axum::response::Response {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    set_logo_setting(&state, "");
+    (StatusCode::OK, Json(json!({ "ok": true }))).into_response()
+}
+
+/// 更新 settings.site_logo；顺带删除被替换下来的旧文件（换一次删一次，目录不积灰）。
+fn set_logo_setting(state: &AppState, url: &str) {
+    let old = state.settings().site_logo;
+    let _ = state.store.with(|c| {
+        if url.is_empty() {
+            c.execute("DELETE FROM settings WHERE key = 'site_logo'", [])?;
+        } else {
+            c.execute(
+                "INSERT INTO settings (key, value) VALUES ('site_logo', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = ?1",
+                [url],
+            )?;
+        }
+        Ok(())
+    });
+    if let Some(f) = old.strip_prefix("/uploads/") {
+        let _ = std::fs::remove_file(state.data_dir.join("uploads").join(f));
+    }
 }
 
 /// 登录用户可见的分组（admin 全量；viewer 按授权过滤）

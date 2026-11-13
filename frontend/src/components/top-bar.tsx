@@ -16,6 +16,8 @@ import { Bell, LogOut, UserRound } from 'lucide-react'
 
 export function TopBar(props: {
   siteName: string
+  /** 自定义 LOGO（/uploads/…，空串回退默认 favicon.svg） */
+  logo?: string
   /** 实时连接状态（登录后才有） */
   status?: string
   /** undefined=加载中（不渲染用户区）；null=未登录 */
@@ -29,7 +31,7 @@ export function TopBar(props: {
   changeView?: (v: ViewMode) => void
   search?: { value: string; onChange: (v: string) => void }
 }) {
-  const { siteName, status, me, showLogin = true, navigate, onLogout, view, changeView, search } = props
+  const { siteName, logo, status, me, showLogin = true, navigate, onLogout, view, changeView, search } = props
   return (
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-[1280px] items-center gap-2 px-4 py-3 sm:gap-3 sm:px-6">
@@ -38,7 +40,7 @@ export function TopBar(props: {
           className="flex max-w-[55%] shrink-0 items-center gap-2.5 font-semibold transition-opacity hover:opacity-70"
           onClick={() => navigate('/')}
         >
-          <img src="/favicon.svg" alt="" className="size-8 shrink-0 rounded-full object-cover" />
+          <img src={logo || '/favicon.svg'} alt="" className="size-8 shrink-0 rounded-full object-cover" />
           <span className="truncate text-base">{siteName}</span>
           {status && (
             <span

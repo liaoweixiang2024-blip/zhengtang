@@ -1,7 +1,23 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+
+/* 正文字体：本地预载（index.html preload + font-display: block）。
+   不再用 @fontsource 的 import——它的 font-display: swap 会让拉丁字符先按系统字体
+   排版、字体到货后再变宽，刷新时页头/卡片文字挤动（FOUT 抖动根源之一）。 */
+@font-face {
+  font-family: 'Geist Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url('/fonts/geist-latin-wght-normal.woff2') format('woff2-variations');
+}
+
+/* 滚动条槽位恒定预留：前台短页无滚动条、后台长页有滚动条时，居中的 1280 容器
+   不再被滚动条挤出十几像素（前后台切换"从右往左平移"的根源）。 */
+html {
+  scrollbar-gutter: stable;
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -211,11 +227,6 @@
   .globe-reg { min-height: 32px; }
   .globe-rows { max-height: 232px; }
 }
-
-/* 点亮地图：国家 path 需要可点（.globe-atlas svg path 默认 pointer-events:none） */
-.globe-atlas svg path.map-country { pointer-events: auto; }
-.globe-atlas svg path.map-country:hover { fill-opacity: 0.75; }
-.globe-atlas svg circle { pointer-events: auto; }
 
 /* 点亮地图：国家 path 需要可点（.globe-atlas svg path 默认 pointer-events:none） */
 .globe-atlas svg path.map-country { pointer-events: auto; }

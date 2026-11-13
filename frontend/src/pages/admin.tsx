@@ -1,5 +1,5 @@
 // 管理页：服务器管理 / 分组 / 用户 / 审计日志 / 告警中心 / 设置
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alerts } from '@/pages/alerts'
 import { Badge } from '@/components/ui/badge'
@@ -640,11 +640,14 @@ export const REGIONS = [
 function SettingsTab() {
   const [siteName, setSiteName] = useState('')
   const [description, setDescription] = useState('')
+  const [logo, setLogo] = useState('')
+  const [logoBusy, setLogoBusy] = useState(false)
   const [publicEnabled, setPublicEnabled] = useState(true)
   const [globeEnabled, setGlobeEnabled] = useState(true)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [loaded, setLoaded] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch('/api/admin/settings')
@@ -653,11 +656,40 @@ function SettingsTab() {
         if (d.error) return
         setSiteName(d.site_name ?? '')
         setDescription(d.site_description ?? '')
+        setLogo(d.site_logo ?? '')
         setPublicEnabled(d.public_page_enabled !== false)
         setGlobeEnabled(d.globe_enabled !== false)
         setLoaded(true)
       })
   }, [])
+
+  // LOGO 上传 / 恢复默认：立即生效并广播（顶栏/标签页图标同步换）
+  const uploadLogo = async (f: File) => {
+    setLogoBusy(true)
+    setError('')
+    const fd = new FormData()
+    fd.append('file', f)
+    const res = await fetch('/api/admin/logo', { method: 'POST', body: fd })
+    const d = await res.json().catch(() => ({}))
+    setLogoBusy(false)
+    if (!res.ok) {
+      setError(d.error ?? '上传失败')
+      return
+    }
+    setLogo(d.logo)
+    dispatchEvent(new CustomEvent('zt-site-changed'))
+  }
+  const resetLogo = async () => {
+    setLogoBusy(true)
+    const res = await fetch('/api/admin/logo', { method: 'DELETE' })
+    setLogoBusy(false)
+    if (!res.ok) {
+      setError('恢复失败')
+      return
+    }
+    setLogo('')
+    dispatchEvent(new CustomEvent('zt-site-changed'))
+  }
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -680,6 +712,7 @@ function SettingsTab() {
     setSaved(true)
     // 立即刷新标题，免手动刷新页面
     document.title = `${siteName} · 服务器探针`
+    dispatchEvent(new CustomEvent('zt-site-changed'))
     setTimeout(() => setSaved(false), 2000)
   }
 
@@ -689,6 +722,42 @@ function SettingsTab() {
       <CardHeader><CardTitle className="text-base">站点设置</CardTitle></CardHeader>
       <CardContent>
         <form onSubmit={save} className="max-w-lg space-y-4">
+          <div className="space-y-2">
+            <Label>站点 LOGO</Label>
+            <div className="flex items-center gap-4">
+              <img
+                src={logo || '/favicon.svg'}
+                alt="LOGO 预览"
+                className="size-14 shrink-0 rounded-2xl border border-border object-cover"
+              />
+              <div className="min-w-0 space-y-1.5">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/x-icon"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    e.target.value = '' // 同名文件可重复选择
+                    if (f) uploadLogo(f)
+                  }}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" disabled={logoBusy} onClick={() => fileRef.current?.click()}>
+                    {logoBusy ? '处理中…' : '上传图片'}
+                  </Button>
+                  {logo && (
+                    <Button type="button" variant="ghost" size="sm" disabled={logoBusy} onClick={resetLogo}>
+                      恢复默认
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  显示在顶栏与浏览器标签页（png / jpg / webp / gif / ico，≤1MB）
+                </p>
+              </div>
+            </div>
+          </div>
           <div className="space-y-2">
             <Label>站点名称</Label>
             <Input value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder="如 我的探针站" maxLength={32} />

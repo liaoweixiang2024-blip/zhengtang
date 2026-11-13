@@ -61,6 +61,8 @@ pub struct ServerView {
 pub struct SiteSettings {
     pub site_name: String,
     pub site_description: String,
+    /// 自定义 LOGO（/uploads/logo-* 路径；空 = 默认 favicon.svg）
+    pub site_logo: String,
     /// 公开展示页总开关
     pub public_page_enabled: bool,
     /// 节点地球（点亮世界地图）开关
@@ -72,6 +74,7 @@ impl Default for SiteSettings {
         Self {
             site_name: "zhengtang".into(),
             site_description: "服务器在线状态与资源监控".into(),
+            site_logo: String::new(),
             public_page_enabled: true,
             globe_enabled: true,
         }
@@ -275,6 +278,7 @@ impl AppState {
             };
             if let Some(v) = get("site_name") { s.site_name = v; }
             if let Some(v) = get("site_description") { s.site_description = v; }
+            if let Some(v) = get("site_logo") { s.site_logo = v; }
             if let Some(v) = get("public_page_enabled") { s.public_page_enabled = v != "0"; }
             if let Some(v) = get("globe_enabled") { s.globe_enabled = v != "0"; }
             Ok(())

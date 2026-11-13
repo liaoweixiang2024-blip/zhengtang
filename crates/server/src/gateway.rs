@@ -27,13 +27,29 @@ use crate::store::unix_now;
 pub async fn ws_agent_handler(
     State(state): State<Arc<AppState>>,
     ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>,
+    headers: axum::http::HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
+    // 对端 IP 随会话带上（上线时记入 last_ip，地区自动识别用）。
+    // 反代场景（nginx/caddy 本机转发，对端是 127.0.0.1）取 X-Forwarded-For 首跳；
+    // 对端是公网直连时忽略该头——agent 自己也能带 XFF 头，直连下信头必被伪造。
+    let peer_ip = peer.ip().to_string();
+    let ip = if crate::auth_api::is_private_ip(&peer_ip) {
+        headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(',').next())
+            .map(str::trim)
+            .filter(|v| v.parse::<std::net::IpAddr>().is_ok())
+            .map(str::to_string)
+            .unwrap_or(peer_ip)
+    } else {
+        peer_ip
+    };
     ws.protocols(["zhengtang-agent-v1"])
         .max_message_size(MAX_MESSAGE_SIZE)
         .max_frame_size(MAX_MESSAGE_SIZE)
-        // 对端 IP 随会话带上（上线时记入 last_ip，地区自动识别用）
-        .on_upgrade(move |socket| handle_socket(state, socket, peer.ip().to_string()))
+        .on_upgrade(move |socket| handle_socket(state, socket, ip))
 }
 
 async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket, peer_ip: String) {

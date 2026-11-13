@@ -6,6 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="服务器在线状态与资源监控" />
     <title>zhengtang · 服务器探针</title>
+    <!-- 首帧主题引导：React 挂载前先把 dark class 上好，暗色用户刷新不再闪白
+         （与 theme-toggle.tsx 的 localStorage key 同源，改一处记得改另一处） -->
+    <script>
+      ;(function () {
+        try {
+          var t = localStorage.getItem('zt-theme')
+          var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (e) {}
+      })()
+    </script>
+    <!-- 正文字体预载：与 CSS 里的 @font-face（font-display: block）配合，
+         首帧即 Geist，避免 swap 到货后拉丁字符变宽把页头挤抖 -->
+    <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>

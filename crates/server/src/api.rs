@@ -25,6 +25,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/a/{token}", get(install_script))
         // agent 二进制自托管下载（data/agents/，国内/GitHub 不可达环境用）
         .route("/dl/{file}", get(download_agent))
+        // 站点 LOGO 等上传文件（data/uploads/；匿名只读——LOGO 本就是公开资源）
+        .route("/uploads/{file}", get(download_upload))
 }
 
 /// 从 data/agents/ 下发 agent 包（仅允许 zhengtang-agent-*.tar.gz 文件名）。
@@ -53,6 +55,42 @@ async fn download_agent(
     }
 }
 
+/// 从 data/uploads/ 下发上传文件（LOGO 等；仅位图扩展，不接受 SVG——
+/// 同源 SVG 直开时可执行脚本，位图无此面）。
+async fn download_upload(
+    State(state): State<Arc<AppState>>,
+    Path(file): Path<String>,
+) -> impl IntoResponse {
+    const MIME: &[(&str, &str)] = &[
+        ("png", "image/png"),
+        ("jpg", "image/jpeg"),
+        ("jpeg", "image/jpeg"),
+        ("webp", "image/webp"),
+        ("gif", "image/gif"),
+        ("ico", "image/x-icon"),
+    ];
+    if file.contains("..") || file.contains('/') {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    let ext = file.rsplit('.').next().unwrap_or("").to_lowercase();
+    let Some((_, mime)) = MIME.iter().find(|(e, _)| *e == ext) else {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    };
+    let path = state.data_dir.join("uploads").join(&file);
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => (
+            [
+                (axum::http::header::CONTENT_TYPE, *mime),
+                // 文件名带随机串、换 LOGO 即换名：可放心长缓存
+                (axum::http::header::CACHE_CONTROL, "public, max-age=86400"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "not found").into_response(),
+    }
+}
+
 async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let user_count = state
         .store
@@ -66,6 +104,7 @@ async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         "setup_needed": user_count == 0,
         "site_name": st.site_name,
         "site_description": st.site_description,
+        "site_logo": st.site_logo,
         "public_page_enabled": st.public_page_enabled,
         "globe_enabled": st.globe_enabled,
     }))

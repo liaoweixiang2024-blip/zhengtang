@@ -34,13 +34,13 @@ function usePathRoute(): [string, (to: string, replace?: boolean) => void] {
   return [path, navigate]
 }
 
-interface Site { site_name: string; site_description: string; public_page_enabled: boolean; globe_enabled: boolean }
+interface Site { site_name: string; site_description: string; public_page_enabled: boolean; globe_enabled: boolean; site_logo: string }
 
 export default function App() {
   const [path, navigate] = usePathRoute()
   const [me, setMe] = useState<Me | null | undefined>(undefined) // undefined=加载中
   const [setupNeeded, setSetupNeeded] = useState(false)
-  const [site, setSite] = useState<Site>({ site_name: 'zhengtang', site_description: '', public_page_enabled: true, globe_enabled: true })
+  const [site, setSite] = useState<Site>({ site_name: 'zhengtang', site_description: '', public_page_enabled: true, globe_enabled: true, site_logo: '' })
   const [view, setView] = useState<ViewMode>(
     () => (localStorage.getItem(VIEW_KEY) as ViewMode) || 'detailed',
   )
@@ -54,7 +54,7 @@ export default function App() {
   }, [])
   useEffect(loadMe, [loadMe])
 
-  useEffect(() => {
+  const loadStatus = useCallback(() => {
     fetch('/api/status')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -65,6 +65,7 @@ export default function App() {
           site_description: d.site_description || '',
           public_page_enabled: d.public_page_enabled !== false,
           globe_enabled: d.globe_enabled !== false,
+          site_logo: d.site_logo || '',
         }
         setSite(s)
         // SEO：动态 title/description（SPA 环境下对执行 JS 的爬虫生效）
@@ -72,9 +73,18 @@ export default function App() {
         if (s.site_description) {
           document.querySelector('meta[name=description]')?.setAttribute('content', s.site_description)
         }
+        // 自定义 LOGO：浏览器标签页图标一并替换
+        document.querySelector('link[rel="icon"]')?.setAttribute('href', s.site_logo || '/favicon.svg')
       })
       .catch(() => setSetupNeeded(false))
   }, [])
+  useEffect(loadStatus, [loadStatus])
+  // 后台改了 LOGO/站名：广播一下，前台立即跟上（免整页刷新）
+  useEffect(() => {
+    const on = () => loadStatus()
+    addEventListener('zt-site-changed', on)
+    return () => removeEventListener('zt-site-changed', on)
+  }, [loadStatus])
 
   const changeView = (v: ViewMode) => {
     setView(v)
@@ -91,7 +101,7 @@ export default function App() {
   if (path === '/public') {
     return site.public_page_enabled ? (
       <div className="min-h-svh bg-background text-foreground">
-        <TopBar siteName={site.site_name} me={me ?? null} navigate={navigate} onLogout={logout} />
+        <TopBar siteName={site.site_name} logo={site.site_logo} me={me ?? null} navigate={navigate} onLogout={logout} />
         <PublicPage />
       </div>
     ) : (
@@ -110,6 +120,7 @@ export default function App() {
       <div className="flex min-h-svh flex-col bg-background text-foreground">
         <TopBar
           siteName={site.site_name}
+          logo={site.site_logo}
           me={null}
           showLogin={path !== '/login'}
           navigate={navigate}
@@ -131,6 +142,7 @@ export default function App() {
 
   return <Main
     siteName={site.site_name}
+    siteLogo={site.site_logo}
     path={path}
     navigate={navigate}
     me={me}
@@ -145,6 +157,7 @@ export default function App() {
 
 function Main(props: {
   siteName: string
+  siteLogo: string
   path: string
   navigate: (h: string, replace?: boolean) => void
   me: Me
@@ -155,7 +168,7 @@ function Main(props: {
   onLogout: () => void
   globeEnabled: boolean
 }) {
-  const { siteName, path, navigate, me, view, changeView, group, setGroup, onLogout, globeEnabled } = props
+  const { siteName, siteLogo, path, navigate, me, view, changeView, group, setGroup, onLogout, globeEnabled } = props
   const { servers, status } = useServers()
   // 暗色（地球扫掠线透明度用）：跟着 <html class=dark> 走
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -190,7 +203,7 @@ function Main(props: {
   // 告警中心（独立路由，观察者从这里进；管理员的入口在后台侧边栏）
   if (path === '/alerts') {
     return (
-      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} siteLogo={siteLogo} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         <Alerts isAdmin={me.role === 'admin'} />
       </Shell>
     )
@@ -200,13 +213,13 @@ function Main(props: {
   if (path === '/admin' || path.startsWith('/admin')) {
     if (me.role !== 'admin') {
       return (
-        <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+        <Shell siteName={siteName} siteLogo={siteLogo} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
           <div className="py-20 text-center text-muted-foreground">需要管理员权限</div>
         </Shell>
       )
     }
     return (
-      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} siteLogo={siteLogo} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         <Admin
           tab={parseAdminTab(path.split('?')[1] ?? '')}
           onTabChange={(k) => navigate(`/admin?tab=${k}`, true)}
@@ -221,7 +234,7 @@ function Main(props: {
   const detailServer = detailId ? servers.get(detailId) : null
   if (detailId) {
     return (
-      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} siteLogo={siteLogo} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         {detailServer ? (
           <ServerDetail server={detailServer} onBack={() => navigate('/')} />
         ) : status === 'open' ? (
@@ -260,6 +273,7 @@ function Main(props: {
   return (
     <Shell
       siteName={siteName}
+      siteLogo={siteLogo}
       status={status}
       me={me}
       navigate={navigate}
@@ -284,7 +298,13 @@ function Main(props: {
         {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
         {sorted.length === 0 ? (
           <div className="py-20 text-center text-muted-foreground">
-            {list.length === 0 ? '还没有服务器，到「管理 → 服务器」添加一台' : '该分组暂无服务器'}
+            {list.length === 0
+              ? // WS 快照未到 ≠ 没有服务器：连上后才下"还没有服务器"的结论，
+                // 否则每次打开都先闪一下空态再跳成卡片列表
+                status === 'open'
+                ? '还没有服务器，到「管理 → 服务器」添加一台'
+                : '正在同步服务器数据…'
+              : '该分组暂无服务器'}
           </div>
         ) : view === 'compact' ? (
           <ServerTable servers={sorted} onOpen={(id) => navigate(`/server/${id}`)} />
@@ -312,6 +332,7 @@ function Main(props: {
 
 function Shell(props: {
   siteName: string
+  siteLogo: string
   status: string
   me: Me
   navigate: (h: string, replace?: boolean) => void
@@ -324,11 +345,12 @@ function Shell(props: {
   search?: { value: string; onChange: (v: string) => void }
   children: React.ReactNode
 }) {
-  const { siteName, status, me, navigate, onLogout, bare, full, view, changeView, search, children } = props
+  const { siteName, siteLogo, status, me, navigate, onLogout, bare, full, view, changeView, search, children } = props
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <TopBar
         siteName={siteName}
+        logo={siteLogo}
         status={status}
         me={me}
         navigate={navigate}

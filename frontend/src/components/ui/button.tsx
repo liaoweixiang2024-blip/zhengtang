@@ -25,12 +25,14 @@ const buttonVariants = cva(
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-9",
+        // 图标尺寸的焦点环收紧为内描边：基础款 ring-3 在 36px 小按钮上是
+        // 一圈外扩大圆角框（菜单关闭后 Radix 把焦点还给按钮时尤其显眼），改画在按钮内缘
+        icon: "size-9 focus-visible:border-transparent focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-ring/40",
         "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
+          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg focus-visible:border-transparent focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-9",
+          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg focus-visible:border-transparent focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-ring/40",
+        "icon-lg": "size-9 focus-visible:border-transparent focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-ring/40",
       },
     },
     defaultVariants: {
