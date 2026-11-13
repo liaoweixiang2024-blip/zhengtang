@@ -104,6 +104,8 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now zhengtang-agent
+# 覆盖升级场景：enable --now 对已运行服务不重启，强制切到新二进制
+systemctl restart zhengtang-agent
 
 # ---------- 快捷管理命令 zt-agent ----------
 # 装好后即可用：zt-agent status|log|restart|stop|start|upgrade|uninstall
