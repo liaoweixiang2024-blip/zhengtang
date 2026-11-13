@@ -1,8 +1,11 @@
 // 全站统一顶栏（jikasei 同款结构）：
 // 站名（图标+粗体，hover 透明度）… 弹性空隙 … 搜索 | 图标条带（账号/卡片形态/主题）
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { CardStyleMenu } from '@/components/card-style-menu'
 import { SearchBox } from '@/components/search-box'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -67,8 +70,7 @@ export function TopBar(props: {
   )
 }
 
-/** 账号菜单：ghost 图标按钮（与条带其他图标同规格）+ 悬停/点击展开后台菜单。
- *  浮层 portal 挂到 header（条带 overflow-x-auto 会裁掉直接展开的浮层）。 */
+/** 账号菜单：shadcn DropdownMenu（悬停展开：受控 + 160ms 关闭缓冲，可从容移入） */
 function UserMenu({
   me, navigate, onLogout,
 }: {
@@ -77,107 +79,57 @@ function UserMenu({
   onLogout: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const root = useRef<HTMLDivElement>(null)
-  const menu = useRef<HTMLDivElement>(null)
-  const [spot, setSpot] = useState<{ host: HTMLElement; top: number; right: number } | null>(null)
-
-  useLayoutEffect(() => {
-    if (!open) return
-    const place = () => {
-      const b = root.current?.getBoundingClientRect()
-      const host = root.current?.closest<HTMLElement>('header')
-      const h = host?.getBoundingClientRect()
-      if (b && host && h) setSpot({ host, top: b.bottom - h.top, right: h.right - b.right })
-    }
-    place()
-    window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: PointerEvent) => {
-      const el = e.target
-      if (!(el instanceof HTMLElement) || !(root.current?.contains(el) || menu.current?.contains(el))) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
+  const timer = useRef<number | undefined>(undefined)
+  const enter = () => {
+    window.clearTimeout(timer.current)
+    setOpen(true)
+  }
+  const leave = () => {
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setOpen(false), 160)
+  }
   const admin = me.role === 'admin'
-  const item =
-    'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm outline-none transition-colors hover:bg-accent'
 
   return (
-    <div
-      ref={root}
-      className="relative inline-flex"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      <Button
-        variant="ghost"
-        size="icon"
-        title={`${me.username} · 账号菜单`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <UserRound />
-      </Button>
-      {open && spot && createPortal(
-        <div
-          ref={menu}
-          role="menu"
-          style={{ top: spot.top, right: spot.right }}
-          className="absolute z-50 block w-52 pt-1"
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => setOpen(false)}
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          title={`${me.username} · 账号菜单`}
+          aria-label="账号菜单"
+          onMouseEnter={enter}
+          onMouseLeave={leave}
+          onClick={() => setOpen((v) => !v)}
         >
-          <div className="overflow-hidden rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-xl">
-            <div className="px-2.5 pb-1.5 pt-1">
-              <div className="truncate text-sm font-medium">{me.username}</div>
-              <div className="text-xs text-muted-foreground">{admin ? '管理员' : '观察者'}</div>
-            </div>
-            <div className="my-1 h-px bg-border" />
-            {!admin && (
-              <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); navigate('/alerts') }}>
-                <Bell className="size-4 shrink-0 text-muted-foreground" />
-                告警中心
-              </button>
-            )}
-            {admin &&
-              NAV.map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="menuitem"
-                  className={item}
-                  onClick={() => { setOpen(false); navigate(`/admin?tab=${key}`) }}
-                >
-                  <Icon className="size-4 shrink-0 text-muted-foreground" />
-                  {label}
-                </button>
-              ))}
-            <div className="my-1 h-px bg-border" />
-            <button
-              type="button"
-              role="menuitem"
-              className={cn(item, 'text-destructive hover:bg-destructive/10 hover:text-destructive')}
-              onClick={() => { setOpen(false); onLogout() }}
-            >
-              <LogOut className="size-4 shrink-0" />
-              退出登录
-            </button>
-          </div>
-        </div>,
-        spot.host,
-      )}
-    </div>
+          <UserRound />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52" onMouseEnter={enter} onMouseLeave={leave}>
+        <DropdownMenuLabel>
+          <div className="truncate text-sm font-medium">{me.username}</div>
+          <div className="text-xs font-normal text-muted-foreground">{admin ? '管理员' : '观察者'}</div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {!admin && (
+          <DropdownMenuItem onClick={() => navigate('/alerts')}>
+            <Bell />
+            告警中心
+          </DropdownMenuItem>
+        )}
+        {admin &&
+          NAV.map(({ key, label, icon: Icon }) => (
+            <DropdownMenuItem key={key} onClick={() => navigate(`/admin?tab=${key}`)}>
+              <Icon />
+              {label}
+            </DropdownMenuItem>
+          ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onLogout}>
+          <LogOut />
+          退出登录
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

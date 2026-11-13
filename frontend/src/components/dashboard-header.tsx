@@ -247,7 +247,7 @@ function Block({
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
           >
-            <div className="max-h-60 overflow-y-auto rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-xl">
+            <div className="max-h-60 overflow-y-auto rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg">
               <div className="px-2 pb-1 pt-0.5 text-xs font-medium text-muted-foreground">{title} · 明细</div>
               {rows!.map((r, i) => (
                 <div key={i} className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs">

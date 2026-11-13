@@ -25,7 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       return (
         <div className="flex min-h-svh items-center justify-center bg-background p-4">
-          <div className="w-full max-w-md space-y-4 rounded-lg border p-6 text-center">
+          <div className="w-full max-w-md space-y-4 rounded-lg border border-border p-6 text-center">
             <h1 className="text-lg font-semibold">页面出错了</h1>
             <p className="break-all font-mono text-xs text-muted-foreground">
               {this.state.error.message}

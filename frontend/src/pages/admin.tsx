@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes } from '@/lib/format'
@@ -50,34 +52,44 @@ export function Admin({ tab, onTabChange, navigate }: {
     onTabChange?.(k)
   }
   return (
-    <div className="flex flex-col gap-6 md:flex-row">
-      {/* 侧边导航：窄屏横向滚动，宽屏左侧固定 */}
-      <nav className="flex gap-1 overflow-x-auto pb-1 md:w-44 md:shrink-0 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0">
-        {NAV.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => select(key)}
-            className={
-              'flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ' +
-              (active === key
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-foreground')
-            }
-          >
-            <Icon className="size-4" />
-            {label}
-          </button>
-        ))}
-      </nav>
-      <div className="min-w-0 flex-1">
-        {active === 'servers' && <ServersTab navigate={navigate} />}
-        {active === 'groups' && <GroupsTab />}
-        {active === 'users' && <UsersTab />}
-        {active === 'audit' && <AuditTab />}
-        {active === 'alerts' && <Alerts isAdmin />}
-        {active === 'settings' && <SettingsTab />}
-      </div>
-    </div>
+    // shadcn 官方 Sidebar 套件：宽屏固定侧栏（可收成图标列）、窄屏 offcanvas 抽屉
+    <SidebarProvider>
+      <TooltipProvider delayDuration={200}>
+      <Sidebar collapsible="icon">
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>后台管理</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {NAV.map(({ key, label, icon: Icon }) => (
+                  <SidebarMenuItem key={key}>
+                    <SidebarMenuButton isActive={active === key} tooltip={label} onClick={() => select(key)}>
+                      <Icon />
+                      <span>{label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
+      </TooltipProvider>
+      <SidebarInset>
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+          <SidebarTrigger />
+          <div className="text-sm font-medium">{NAV.find((n) => n.key === active)?.label}</div>
+        </header>
+        <div className="flex-1 p-4 pt-4">
+          {active === 'servers' && <ServersTab navigate={navigate} />}
+          {active === 'groups' && <GroupsTab />}
+          {active === 'users' && <UsersTab />}
+          {active === 'audit' && <AuditTab />}
+          {active === 'alerts' && <Alerts isAdmin />}
+          {active === 'settings' && <SettingsTab />}
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
@@ -693,7 +705,7 @@ function SettingsTab() {
             <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="网页 meta description" maxLength={160} />
             <p className="text-xs text-muted-foreground">写入 &lt;meta name=description&gt;，供搜索引擎摘要（≤160 字符）</p>
           </div>
-          <div className="flex items-center justify-between rounded-lg border p-3">
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div>
               <div className="text-sm font-medium">节点世界地图</div>
               <div className="text-xs text-muted-foreground">
@@ -702,7 +714,7 @@ function SettingsTab() {
             </div>
             <Switch checked={globeEnabled} onCheckedChange={setGlobeEnabled} />
           </div>
-          <div className="flex items-center justify-between rounded-lg border p-3">
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div>
               <div className="text-sm font-medium">公开展示页</div>
               <div className="text-xs text-muted-foreground">
@@ -910,7 +922,7 @@ function EditServerDialog({
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between rounded-lg border p-3">
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <span className="text-sm">公开展示（/public 匿名可见）</span>
             <Switch checked={publicVisible} onCheckedChange={setPublicVisible} />
           </div>

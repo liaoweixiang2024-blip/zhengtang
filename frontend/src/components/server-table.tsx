@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 
 export function ServerTable({ servers, onOpen }: { servers: ServerView[]; onOpen?: (id: string) => void }) {
   return (
-    <div className="rounded-lg border">
+    <div className="rounded-lg border border-border">
       <Table>
         <TableHeader>
           <TableRow>
