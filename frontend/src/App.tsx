@@ -1,9 +1,9 @@
 // 路由：/ 仪表盘 | /server/{id} 详情 | /login 登录/向导 | /admin 管理 | /alerts 告警 | /public 公开页
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GroupTabs, StatCards, type ViewMode } from '@/components/dashboard-header'
-import { WorldMap } from '@/components/world-map'
+import { Globe } from '@/components/globe-view'
 import { regionCode } from '@/components/server-card'
-import { regionOf } from '@/lib/globe'
+import { regionOf, regionView } from '@/lib/globe'
 import { TopBar } from '@/components/top-bar'
 import { ServerCard, ServerCardMini } from '@/components/server-card'
 import { ServerTable } from '@/components/server-table'
@@ -157,6 +157,13 @@ function Main(props: {
 }) {
   const { siteName, path, navigate, me, view, changeView, group, setGroup, onLogout, globeEnabled } = props
   const { servers, status } = useServers()
+  // 暗色（地球扫掠线透明度用）：跟着 <html class=dark> 走
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
+  useEffect(() => {
+    const mo = new MutationObserver(() => setDark(document.documentElement.classList.contains('dark')))
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => mo.disconnect()
+  }, [])
   // 顶栏搜索（按名称过滤列表）+ 地区筛选（地球侧栏，叠加在分组/搜索之上）
   const [query, setQuery] = useState('')
   const [region, setRegion] = useState<string | null>(null)
@@ -245,14 +252,8 @@ function Main(props: {
   const searched = q ? filtered.filter((s) => s.name.toLowerCase().includes(q) || (s.region ?? '').toLowerCase().includes(q)) : filtered
   // 地球输入（分组+搜索后的机器；country 供落针与地区列表）
   const gnodes = searched.map((s) => ({ id: s.id, name: s.name, online: s.online, country: regionCode(s.region) }))
-  // 地区筛选：地区键（城市级）或国家码（地图点击）都匹配
-  const finalList =
-    region == null
-      ? searched
-      : searched.filter((_, i) => {
-          const r = regionOf(gnodes[i])
-          return !!r && (r.key === region || r.code === region)
-        })
+  const gview = regionView(gnodes, region)
+  const finalList = region == null ? searched : searched.filter((_, i) => regionOf(gnodes[i])?.key === region)
   const sorted = [...finalList].sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
   const hasCountry = gnodes.some((n) => n.country)
 
@@ -269,8 +270,17 @@ function Main(props: {
     >
       <div className="space-y-5">
         <StatCards servers={list} />
-        {/* 点亮世界地图（后台可开关）：左地图（国家点亮，点击筛选）右地区列表 */}
-        {globeEnabled && hasCountry && <WorldMap nodes={gnodes} region={region} onRegion={setRegion} />}
+        {/* 节点地球（后台可开关）：左地球（针=机器，可拖转/点开）右地区列表（点击筛选） */}
+        {globeEnabled && hasCountry && (
+          <Globe
+            nodes={gnodes}
+            dark={dark}
+            region={gview.current}
+            onRegion={setRegion}
+            onOpen={(id) => navigate(`/server/${id}`)}
+            onWarm={() => {}}
+          />
+        )}
         {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
         {sorted.length === 0 ? (
           <div className="py-20 text-center text-muted-foreground">

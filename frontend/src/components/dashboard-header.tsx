@@ -1,5 +1,6 @@
 // 概览统计卡片行 + 分组标签 + 形态切换（参考 JIKASEI 主题交互）
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Card } from '@/components/ui/card'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -199,7 +200,8 @@ function Tile({ children }: { children: React.ReactNode }) {
   return <Card className="flex min-w-0 flex-col p-4">{children}</Card>
 }
 
-/** 单块读数：小标签 / 内容 / 底行小字；rows 非空时悬停弹明细 */
+/** 单块读数：小标签 / 内容 / 底行小字；rows 非空时悬停弹明细。
+ *  明细面板 portal 到 body + fixed 定位：不与下方任何区块（地球/卡片）比层级 */
 function Block({
   title, rows, align = 'left', children,
 }: {
@@ -209,28 +211,50 @@ function Block({
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
+  const [spot, setSpot] = useState<{ top: number; left?: number; right?: number } | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
   const hasRows = !!rows?.length
+  const enter = () => {
+    if (!hasRows) return
+    const r = ref.current?.getBoundingClientRect()
+    if (r) {
+      setSpot(
+        align === 'right'
+          ? { top: r.bottom + 6, right: window.innerWidth - r.right }
+          : { top: r.bottom + 6, left: r.left },
+      )
+    }
+    setOpen(true)
+  }
   return (
     <div
+      ref={ref}
       className="relative mt-0 flex min-w-0 flex-1 flex-col"
-      onMouseEnter={() => hasRows && setOpen(true)}
+      onMouseEnter={enter}
       onMouseLeave={() => setOpen(false)}
     >
       <div className="text-xs text-muted-foreground">{title}</div>
       {children}
-      {open && hasRows && (
-        <div className={cn('absolute top-full z-50 w-64 max-w-[80vw] pt-1.5', align === 'right' ? 'right-0' : 'left-0')}>
-          <div className="max-h-60 overflow-y-auto rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-lg">
-            <div className="px-2 pb-1 pt-0.5 text-xs font-medium text-muted-foreground">{title} · 明细</div>
-            {rows!.map((r, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs">
-                <span className="min-w-0 truncate">{r.left}</span>
-                <span className={cn('shrink-0 tabular-nums', r.danger ? 'text-red-500' : 'text-muted-foreground')}>{r.right}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {open &&
+        hasRows &&
+        spot &&
+        createPortal(
+          <div
+            style={{ position: 'fixed', top: spot.top, ...(spot.left != null ? { left: spot.left } : { right: spot.right }) }}
+            className="z-[70] w-64 max-w-[80vw]"
+          >
+            <div className="max-h-60 overflow-y-auto rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-lg">
+              <div className="px-2 pb-1 pt-0.5 text-xs font-medium text-muted-foreground">{title} · 明细</div>
+              {rows!.map((r, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs">
+                  <span className="min-w-0 truncate">{r.left}</span>
+                  <span className={cn('shrink-0 tabular-nums', r.danger ? 'text-red-500' : 'text-muted-foreground')}>{r.right}</span>
+                </div>
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
