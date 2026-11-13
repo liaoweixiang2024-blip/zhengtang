@@ -55,7 +55,7 @@ export function Admin({ tab, onTabChange, navigate }: {
     // shadcn 官方 Sidebar 套件：宽屏固定侧栏（可收成图标列）、窄屏 offcanvas 抽屉
     <SidebarProvider className="min-h-0">
       <TooltipProvider delayDuration={200}>
-      <Sidebar collapsible="icon" className="min-h-0">
+      <Sidebar collapsible="icon" variant="inset" className="min-h-0">
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>后台管理</SidebarGroupLabel>
@@ -75,12 +75,13 @@ export function Admin({ tab, onTabChange, navigate }: {
         </SidebarContent>
       </Sidebar>
       </TooltipProvider>
-      <SidebarInset className="gap-0 py-0">
+      <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4 sm:px-6">
+          {/* 与侧栏同一张"浮岛卡片"：顶部是折叠按钮 + 当前页名 */}
           <SidebarTrigger />
           <div className="text-sm font-medium">{NAV.find((n) => n.key === active)?.label}</div>
         </header>
-        <div className="flex-1 p-4 sm:px-6">
+        <div className="flex-1 p-4 sm:p-6">
           {active === 'servers' && <ServersTab navigate={navigate} />}
           {active === 'groups' && <GroupsTab />}
           {active === 'users' && <UsersTab />}
