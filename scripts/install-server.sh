@@ -36,7 +36,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/zhengtang-server serve --data-dir /var/lib/zhengtang
+ExecStart=/usr/local/bin/zhengtang-server --data-dir /var/lib/zhengtang serve
 Restart=always
 RestartSec=5
 WorkingDirectory=/var/lib/zhengtang
