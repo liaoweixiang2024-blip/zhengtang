@@ -304,6 +304,17 @@ impl AppState {
             Ok(())
         });
     }
+
+    /// agent 上线：记录 last_seen 与对端 IP（地区自动识别用）。
+    pub fn persist_agent_seen(&self, id: &str, ip: &str) {
+        let _ = self.store.with(|c| {
+            let _ = c.execute(
+                "UPDATE servers SET last_seen_at = ?1, last_ip = ?2 WHERE id = ?3",
+                rusqlite::params![unix_now(), ip, id],
+            );
+            Ok(())
+        });
+    }
 }
 
 impl AppState {

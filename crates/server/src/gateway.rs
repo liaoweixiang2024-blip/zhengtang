@@ -26,16 +26,17 @@ use crate::store::unix_now;
 
 pub async fn ws_agent_handler(
     State(state): State<Arc<AppState>>,
-    ConnectInfo(_peer): ConnectInfo<std::net::SocketAddr>,
+    ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>,
     ws: WebSocketUpgrade,
 ) -> Response {
     ws.protocols(["zhengtang-agent-v1"])
         .max_message_size(MAX_MESSAGE_SIZE)
         .max_frame_size(MAX_MESSAGE_SIZE)
-        .on_upgrade(move |socket| handle_socket(state, socket))
+        // 对端 IP 随会话带上（上线时记入 last_ip，地区自动识别用）
+        .on_upgrade(move |socket| handle_socket(state, socket, peer.ip().to_string()))
 }
 
-async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
+async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket, peer_ip: String) {
     // 1. 下发一次性 challenge
     let mut challenge = [0u8; 32];
     rand::rng().fill_bytes(&mut challenge);
@@ -100,7 +101,7 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
                 continue;
             }
             _ = persist_ticker.tick() => {
-                state.persist_last_seen(&[agent_id.clone()]);
+                state.persist_agent_seen(&agent_id, &peer_ip);
                 continue;
             }
         };
@@ -169,7 +170,7 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket) {
     // 5. 离线清理
     state.agent_cmds.remove(&agent_id);
     state.live.remove(&agent_id);
-    state.persist_last_seen(&[agent_id.clone()]);
+    state.persist_agent_seen(&agent_id, &peer_ip);
     tracing::info!(agent = %agent_id, "agent 离线");
     let _ = state.dash_tx.send(DashboardEvent::Offline { id: agent_id });
 }

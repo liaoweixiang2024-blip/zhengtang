@@ -29,7 +29,7 @@ export function TopBar(props: {
 }) {
   const { siteName, status, me, showLogin = true, navigate, onLogout, view, changeView, search } = props
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-30 bg-background/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-[1280px] items-center gap-2 px-4 py-3 sm:gap-3 sm:px-6">
         {/* 站名：图标 + 粗体；点击回首页（jikasei：hover 透明度而非底色） */}
         <button

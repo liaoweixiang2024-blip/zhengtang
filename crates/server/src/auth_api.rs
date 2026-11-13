@@ -52,6 +52,96 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/servers/{id}/dial-results", get(dial_results))
         // 分组名（仪表盘分组标签用，登录用户；viewer 只见其授权组）
         .route("/api/groups", get(my_groups))
+        // 地区自动识别（按 agent 连接 IP 查询归属地）
+        .route("/api/admin/servers/{id}/detect-region", post(detect_region))
+}
+
+/// 判断是否私网/回环地址（无法公网定位）。
+fn is_private_ip(ip: &str) -> bool {
+    let ip = ip.trim();
+    if ip == "::1" || ip.starts_with("fe80:") || ip.starts_with("fc") || ip.starts_with("fd") {
+        return true;
+    }
+    let v4 = ip.trim_start_matches("::ffff:");
+    let parts: Vec<u32> = v4.split('.').filter_map(|p| p.parse().ok()).collect();
+    if parts.len() == 4 {
+        return parts[0] == 127
+            || parts[0] == 10
+            || parts[0] == 0
+            || (parts[0] == 192 && parts[1] == 168)
+            || (parts[0] == 172 && (16..=31).contains(&parts[1]))
+            || (parts[0] == 169 && parts[1] == 254);
+    }
+    false
+}
+
+/// ISO 国家码 → 国旗 emoji（🇭🇰）
+fn flag_of(code: &str) -> String {
+    let c: Vec<char> = code.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+    if c.len() < 2 {
+        return String::new();
+    }
+    let a = 0x1F1E6 + (c[0] as u32 - 'A' as u32);
+    let b = 0x1F1E6 + (c[1] as u32 - 'A' as u32);
+    format!("{}{}", char::from_u32(a).unwrap_or('🇦'), char::from_u32(b).unwrap_or('🇦'))
+}
+
+/// 地区自动识别：按该机 agent 最近连接 IP 查询归属地（ip-api.com，仅传 IP），
+/// 成功则写入 region（"🇭🇰 香港" 格式）并广播。
+async fn detect_region(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Err(e) = require_admin(&state, &jar) {
+        return e;
+    }
+    let ip: Option<String> = state
+        .store
+        .with(|c| Ok(c.query_row("SELECT last_ip FROM servers WHERE id = ?1", [&id], |r| r.get(0)).ok()))
+        .ok()
+        .flatten();
+    let Some(ip) = ip.filter(|ip| !ip.is_empty()) else {
+        return err(StatusCode::BAD_REQUEST, "该服务器还没有连接记录，无法识别");
+    };
+    if is_private_ip(&ip) {
+        return err(StatusCode::BAD_REQUEST, &format!("连接 IP {ip} 是内网地址，无法识别地区（请手动选择）"));
+    }
+    // ip-api.com 免费接口（无 key，仅传 IP 与语言参数；5s 超时）
+    let url = format!("http://ip-api.com/json/{ip}?fields=status,countryCode,country&lang=zh-CN");
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return err(StatusCode::BAD_GATEWAY, &format!("查询失败：{e}")),
+    };
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => return err(StatusCode::BAD_GATEWAY, &format!("查询失败：{e}")),
+    };
+    let json: serde_json::Value = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => return err(StatusCode::BAD_GATEWAY, &format!("解析失败：{e}")),
+    };
+    if json["status"].as_str() != Some("success") {
+        return err(StatusCode::BAD_GATEWAY, "归属地服务查询失败");
+    }
+    let code = json["countryCode"].as_str().unwrap_or("").to_uppercase();
+    let country = json["country"].as_str().unwrap_or(&code).to_string();
+    if code.len() != 2 {
+        return err(StatusCode::BAD_GATEWAY, "归属地返回异常");
+    }
+    let region = if country.is_empty() { code.clone() } else { format!("{} {}", flag_of(&code), country) };
+    let _ = state.store.with(|c| {
+        c.execute("UPDATE servers SET region = ?1 WHERE id = ?2", rusqlite::params![region, id])?;
+        Ok(())
+    });
+    if let Some(v) = state.server_view(&id) {
+        let _ = state.dash_tx.send(crate::state::DashboardEvent::Update { server: v });
+    }
+    tracing::info!(server = %id, ip = %ip, region = %region, "地区自动识别完成");
+    (StatusCode::OK, Json(json!({ "ok": true, "region": region }))).into_response()
 }
 
 /// 登录用户可见的分组（admin 全量；viewer 按授权过滤）

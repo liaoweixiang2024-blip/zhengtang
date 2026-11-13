@@ -804,15 +804,33 @@ function EditServerDialog({
             </div>
             <div className="space-y-1.5">
               <Label>地区</Label>
-              <Select value={region} onValueChange={setRegion}>
+              <Select
+                value={region}
+                onValueChange={async (v) => {
+                  if (v === '__auto__') {
+                    setError('')
+                    const res = await fetch(`/api/admin/servers/${server.id}/detect-region`, { method: 'POST' })
+                    const d = await res.json()
+                    if (!res.ok) {
+                      setError(d.error ?? '识别失败')
+                      return
+                    }
+                    setRegion(d.region)
+                    return
+                  }
+                  setRegion(v)
+                }}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__auto__">🔄 自动识别（按连接 IP）</SelectItem>
                   <SelectItem value="none">未设置</SelectItem>
                   {REGIONS.map((r) => (
                     <SelectItem key={r} value={r}>{r}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
