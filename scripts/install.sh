@@ -52,7 +52,10 @@ curl $CURL_FLAGS "$URL" -o "$TMP/agent.tar.gz"
 tar -xzf "$TMP/agent.tar.gz" -C "$TMP"
 
 # ---------- 安装 ----------
-install -m 0755 "$TMP/zhengtang-agent" /usr/local/bin/zhengtang-agent
+# 兼容两种打包布局：平铺 或 <name>-<target>/ 子目录
+AGENT_BIN=$(find "$TMP" -type f -name zhengtang-agent | head -1)
+[ -n "$AGENT_BIN" ] || { echo "包内未找到 zhengtang-agent"; exit 1; }
+install -m 0755 "$AGENT_BIN" /usr/local/bin/zhengtang-agent
 mkdir -p /etc/zhengtang
 chmod 0700 /etc/zhengtang
 cat > /etc/zhengtang/agent.toml <<EOF
@@ -119,7 +122,9 @@ case "$1" in
     echo "下载 $BASE_URL/latest/download/zhengtang-agent-$TARGET.tar.gz"
     curl -fsSL "$BASE_URL/latest/download/zhengtang-agent-$TARGET.tar.gz" -o "$TMP/a.tgz"
     tar -xzf "$TMP/a.tgz" -C "$TMP"
-    install -m 0755 "$TMP/zhengtang-agent" /usr/local/bin/zhengtang-agent
+    UPGRADE_BIN=$(find "$TMP" -type f -name zhengtang-agent | head -1)
+    [ -n "$UPGRADE_BIN" ] || { echo "包内未找到 zhengtang-agent"; exit 1; }
+    install -m 0755 "$UPGRADE_BIN" /usr/local/bin/zhengtang-agent
     systemctl restart zhengtang-agent
     echo "✓ 已升级到最新版并重启"
     ;;

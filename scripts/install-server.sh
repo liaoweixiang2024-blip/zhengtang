@@ -23,7 +23,10 @@ trap 'rm -rf "$TMP"' EXIT
 curl -fsSL "$URL" -o "$TMP/server.tar.gz"
 tar -xzf "$TMP/server.tar.gz" -C "$TMP"
 
-install -m 0755 "$TMP/zhengtang-server" /usr/local/bin/zhengtang-server
+# 兼容两种打包布局：平铺 或 <name>-<target>/ 子目录
+SERVER_BIN=$(find "$TMP" -type f -name zhengtang-server | head -1)
+[ -n "$SERVER_BIN" ] || { echo "包内未找到 zhengtang-server"; exit 1; }
+install -m 0755 "$SERVER_BIN" /usr/local/bin/zhengtang-server
 mkdir -p /var/lib/zhengtang
 
 cat > /etc/systemd/system/zhengtang-server.service <<'EOF'
