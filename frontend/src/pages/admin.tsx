@@ -10,7 +10,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { Separator } from '@/components/ui/separator'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { UserMenu } from '@/components/top-bar'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes } from '@/lib/format'
@@ -40,10 +43,13 @@ export function parseAdminTab(query: string): NavKey {
   return NAV.some((n) => n.key === t) ? (t as NavKey) : 'servers'
 }
 
-export function Admin({ tab, onTabChange, navigate }: {
+export function Admin({ tab, onTabChange, navigate, siteName, me, onLogout }: {
   tab?: NavKey
   onTabChange?: (k: NavKey) => void
   navigate?: (h: string) => void
+  siteName?: string
+  me?: { username: string; role: string }
+  onLogout?: () => void
 }) {
   const [inner, setInner] = useState<NavKey>('servers')
   const active = tab ?? inner
@@ -51,37 +57,61 @@ export function Admin({ tab, onTabChange, navigate }: {
     setInner(k)
     onTabChange?.(k)
   }
+  const go = (h: string) => (navigate ? navigate(h) : location.assign(h))
+
+  // shadcn 官方 dashboard-01 块布局：侧栏贴视口左缘（右描边分隔，可折叠成图标列），
+  // 顶栏长在内容区内部（折叠按钮 + 站名回首页 + 账号/主题），内容列限宽 1280 居中
   return (
-    // shadcn 官方 Sidebar 套件：宽屏固定侧栏（可收成图标列）、窄屏 offcanvas 抽屉
-    <SidebarProvider className="min-h-0">
+    <SidebarProvider>
       <TooltipProvider delayDuration={200}>
-      <Sidebar collapsible="icon" variant="inset" className="min-h-0">
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>后台管理</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {NAV.map(({ key, label, icon: Icon }) => (
-                  <SidebarMenuItem key={key}>
-                    <SidebarMenuButton isActive={active === key} tooltip={label} onClick={() => select(key)}>
-                      <Icon />
-                      <span>{label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-      </Sidebar>
+        <Sidebar collapsible="icon">
+          <SidebarHeader>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton size="lg" onClick={() => go('/')} tooltip="返回首页">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                    <Server className="size-4" />
+                  </div>
+                  <div className="grid flex-1 text-left leading-tight">
+                    <span className="truncate font-semibold">{siteName ?? 'zhengtang'}</span>
+                    <span className="truncate text-xs text-muted-foreground">后台管理</span>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>管理</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {NAV.map(({ key, label, icon: Icon }) => (
+                    <SidebarMenuItem key={key}>
+                      <SidebarMenuButton isActive={active === key} tooltip={label} onClick={() => select(key)}>
+                        <Icon />
+                        <span>{label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter />
+        </Sidebar>
       </TooltipProvider>
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4 sm:px-6">
-          {/* 与侧栏同一张"浮岛卡片"：顶部是折叠按钮 + 当前页名 */}
-          <SidebarTrigger />
-          <div className="text-sm font-medium">{NAV.find((n) => n.key === active)?.label}</div>
+        {/* 官方 dashboard 顶栏：折叠按钮 + 分隔线 + 页名；右侧账号/主题 */}
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 !h-4" />
+          <span className="text-sm font-medium">{NAV.find((n) => n.key === active)?.label}</span>
+          <div className="ml-auto flex items-center gap-1">
+            {me && onLogout && <UserMenu me={{ ...me, group_ids: [] }} navigate={go} onLogout={onLogout} />}
+            <ThemeToggle />
+          </div>
         </header>
-        <div className="flex-1 p-4 sm:p-6">
+        <div className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6">
           {active === 'servers' && <ServersTab navigate={navigate} />}
           {active === 'groups' && <GroupsTab />}
           {active === 'users' && <UsersTab />}

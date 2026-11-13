@@ -71,7 +71,7 @@ export function TopBar(props: {
 
 /** 账号菜单：shadcn DropdownMenu（点击展开——Radix 原生行为，悬停受控会与
  *  浮层定位形成开合循环导致闪烁） */
-function UserMenu({
+export function UserMenu({
   me, navigate, onLogout,
 }: {
   me: Me
