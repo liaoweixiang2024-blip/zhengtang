@@ -22,3 +22,5 @@ frontend/dist/
 
 # 崩溃转储
 core
+qemu_*.core
+*.core
