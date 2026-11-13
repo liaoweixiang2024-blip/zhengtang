@@ -80,7 +80,7 @@ export function Admin({ tab, onTabChange, navigate }: {
           <SidebarTrigger />
           <div className="text-sm font-medium">{NAV.find((n) => n.key === active)?.label}</div>
         </header>
-        <div className="flex-1 p-4 pt-4">
+        <div className="flex-1 p-4 sm:px-6">
           {active === 'servers' && <ServersTab navigate={navigate} />}
           {active === 'groups' && <GroupsTab />}
           {active === 'users' && <UsersTab />}

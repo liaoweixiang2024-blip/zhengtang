@@ -206,7 +206,7 @@ function Main(props: {
       )
     }
     return (
-      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare full>
         <Admin
           tab={parseAdminTab(path.split('?')[1] ?? '')}
           onTabChange={(k) => navigate(`/admin?tab=${k}`, true)}
@@ -317,12 +317,14 @@ function Shell(props: {
   navigate: (h: string, replace?: boolean) => void
   onLogout: () => void
   bare?: boolean
+  /** 全宽容器（后台 Sidebar 套件需要：其侧栏为视口 fixed 定位） */
+  full?: boolean
   view?: ViewMode
   changeView?: (v: ViewMode) => void
   search?: { value: string; onChange: (v: string) => void }
   children: React.ReactNode
 }) {
-  const { siteName, status, me, navigate, onLogout, bare, view, changeView, search, children } = props
+  const { siteName, status, me, navigate, onLogout, bare, full, view, changeView, search, children } = props
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <TopBar
@@ -335,7 +337,15 @@ function Shell(props: {
         changeView={changeView}
         search={search}
       />
-      <main className={`mx-auto w-full max-w-[1280px] flex-1 px-4 sm:px-6 ${bare ? 'py-4' : 'py-6'}`}>{children}</main>
+      <main
+        className={
+          full
+            ? 'flex-1'
+            : `mx-auto w-full max-w-[1280px] flex-1 px-4 sm:px-6 ${bare ? 'py-4' : 'py-6'}`
+        }
+      >
+        {children}
+      </main>
       {!bare && (
         <footer className="mt-auto pb-6 pt-2 text-center text-xs text-muted-foreground">
           zhengtang · 严格只读探针
