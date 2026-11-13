@@ -172,7 +172,7 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
           <CardHeader className="pb-0"><CardTitle className="text-sm">GPU</CardTitle></CardHeader>
           <CardContent className="grid gap-4 px-4 pt-2 sm:grid-cols-2 lg:grid-cols-3">
             {m.gpus.map((g, i) => (
-              <div key={i} className="rounded-md border p-3 text-sm">
+              <div key={i} className="rounded-lg bg-muted/50 p-3 text-sm">
                 <div className="mb-2 font-medium">{g.name}</div>
                 <div className="flex justify-between text-muted-foreground">
                   <span>利用率</span><span className="tabular-nums">{g.utilization.toFixed(0)}%</span>
@@ -197,12 +197,12 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
               <Activity className="size-4" /> 拨测
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1.5 px-4 pt-2 text-sm">
+          <CardContent className="space-y-2 px-4 pt-2 text-sm">
             {[...new Map(dial.filter((d) => d.ts != null).map((d) => [d.task_id, d])).values()].map((latest) => {
               const history = dial.filter((d) => d.task_id === latest.task_id)
               const fails = history.filter((d) => d.ok === false).length
               return (
-                <div key={latest.task_id} className="flex flex-wrap items-center gap-2 border-b py-1.5 last:border-0">
+                <div key={latest.task_id} className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
                   <Badge variant={latest.ok ? 'secondary' : 'destructive'} className="font-mono text-xs">
                     {latest.kind.toUpperCase()}
                   </Badge>
@@ -230,10 +230,10 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
               <ListTree className="size-4" /> 进程（共 {m.process_count}）
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1.5 px-4 pt-2 text-sm">
+          <CardContent className="space-y-2 px-4 pt-2 text-sm">
             {m.processes.map((p) => {
               return (
-                <div key={p.rule_id} className="flex items-center gap-3 border-b py-1.5 last:border-0">
+                <div key={p.rule_id} className="flex items-center gap-3 rounded-lg bg-muted/40 px-3 py-2">
                   <span className="font-mono text-xs text-muted-foreground">#{p.rule_id}</span>
                   <Badge variant={p.count > 0 ? 'secondary' : 'destructive'} className="font-mono text-xs">
                     {p.count} 实例
