@@ -21,6 +21,8 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/traffic/summary", get(traffic_summary))
         // 公开展示页（匿名，仅 public_visible 的脱敏子集）
         .route("/api/public/servers", get(public_servers))
+        // 短安装命令：令牌换取已注入参数的安装脚本（匿名；令牌 24h 限时）
+        .route("/a/{token}", get(install_script))
 }
 
 async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -214,6 +216,66 @@ async fn traffic_summary(
 }
 
 
+
+/// 一次性安装令牌 → 注入参数的 install.sh（curl -kfsSL .../a/<token> | sh）。
+/// 令牌过期或服务器已删除返回 404/410。
+async fn install_script(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Path(token): Path<String>,
+) -> impl IntoResponse {
+    // 参数顺序：id / 私钥 / 令牌过期时间（面板地址按请求 Host 推导）
+    let row = state.store.with(|c| {
+        Ok(c.query_row(
+            "SELECT id, secret_key, install_token_expires FROM servers WHERE install_token = ?1",
+            [&token],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<i64>>(2)?,
+                ))
+            },
+        )?)
+    });
+    let (agent_id, secret_key, expires) = match row {
+        Ok(v) => v,
+        Err(e) => { tracing::warn!(%e, "install token lookup failed"); return (StatusCode::NOT_FOUND, "安装令牌无效").into_response(); },
+    };
+    let Some(secret) = secret_key else {
+        return (StatusCode::NOT_FOUND, "安装令牌无效").into_response();
+    };
+    if expires.unwrap_or(0) < crate::store::unix_now() {
+        return (
+            StatusCode::GONE,
+            "安装令牌已过期（在面板删除并重新添加该服务器可获取新令牌）",
+        )
+            .into_response();
+    }
+    // 面板地址：按请求 Host 推导（反代场景取 X-Forwarded-Proto）
+    let host = headers
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("127.0.0.1:8800");
+    let proto = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("https");
+    let base = format!("{proto}://{host}");
+    let ws = format!("{}/ws/agent", base.trim_end_matches('/').replace("https://", "wss://").replace("http://", "ws://"));
+    let fingerprint = crate::tls::FINGERPRINT.get().map(|f| f.to_string()).unwrap_or_default();
+
+    // 头部注入连接参数，其后为通用安装脚本（脚本内 ZT_* 为默认值，命令行参数可覆盖）
+    let tpl = include_str!("../../../scripts/install.sh");
+    let script = format!(
+        "#!/usr/bin/env bash\n# ===== 面板注入（一次性安装令牌，勿外传）=====\nZT_SERVER='{ws}'\nZT_ID='{agent_id}'\nZT_KEY='{secret}'\nZT_FP='{fingerprint}'\n{tpl}"
+    );
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/x-shellscript; charset=utf-8")],
+        script,
+    )
+        .into_response()
+}
 /// 公开展示：仅 public_visible 服务器；不含 IP/系统详情/到期价等敏感字段。
 async fn public_servers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // 总开关关闭时公开页不下发任何数据

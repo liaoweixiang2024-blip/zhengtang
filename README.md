@@ -31,7 +31,14 @@ curl -fsSL https://github.com/zhengtang/zhengtang/releases/latest/download/insta
 
 ### 添加被监控服务器
 
-面板「管理 → 服务器 → 添加」生成安装命令，在目标机执行：
+面板「管理 → 服务器 → 添加」生成安装命令，在目标机执行（一条即可，
+安装令牌 24 小时内有效，删除该服务器即吊销）：
+
+```bash
+curl -kfsSL https://<你的服务端>:8800/a/<安装令牌> | sh
+```
+
+或手动传参（等价）：
 
 ```bash
 curl -fsSL https://<你的服务端>/install.sh | sh -s -- \

@@ -17,6 +17,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ("005_pay", include_str!("../migrations/005_pay.sql")),
     ("006_region", include_str!("../migrations/006_region.sql")),
     ("007_last_ip", include_str!("../migrations/007_last_ip.sql")),
+    ("008_install_token", include_str!("../migrations/008_install_token.sql")),
 ];
 
 pub struct Store {

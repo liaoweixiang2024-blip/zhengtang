@@ -110,7 +110,7 @@ function ServersTab({ navigate }: { navigate?: (h: string) => void }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, server_url: origin }),
     }).then((r) => r.json())
-    setInstallCmd(d.install_cmd ?? '生成失败')
+    setInstallCmd(d.install_cmd_short ?? d.install_cmd ?? '生成失败')
     load()
   }
 
@@ -237,13 +237,16 @@ function AddServerDialog({
           <DialogTitle>添加服务器</DialogTitle>
           <DialogDescription>
             {installCmd
-              ? '安装命令已生成（私钥仅此一次显示），在目标服务器上执行：'
-              : '输入名称生成 Agent 安装参数'}
+              ? '在目标服务器上执行（安装令牌 24 小时内有效，删除该服务器即吊销）：'
+              : '输入名称生成安装命令'}
           </DialogDescription>
         </DialogHeader>
         {installCmd ? (
           <div className="space-y-2">
-            <pre className="max-h-40 overflow-auto rounded-md bg-muted p-3 text-xs break-all whitespace-pre-wrap">{installCmd}</pre>
+            <pre className="max-h-40 overflow-auto rounded-lg bg-muted/50 p-3 text-xs break-all whitespace-pre-wrap">{installCmd}</pre>
+            <p className="text-xs text-muted-foreground">
+              装好后日常管理：<code className="rounded bg-muted px-1">zt-agent status | log | restart | upgrade | uninstall</code>
+            </p>
             <Button
               size="sm"
               onClick={() => {

@@ -7,7 +7,8 @@
 set -euo pipefail
 
 # ---------- 参数 ----------
-SERVER="" ID="" KEY="" FINGERPRINT=""
+# 默认取面板注入的 ZT_*（短安装命令 /a/<token> 场景）；命令行参数可覆盖
+SERVER="${ZT_SERVER:-}" ID="${ZT_ID:-}" KEY="${ZT_KEY:-}" FINGERPRINT="${ZT_FP:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --server) SERVER="$2"; shift 2 ;;
@@ -18,7 +19,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$SERVER" ] && [ -n "$ID" ] && [ -n "$KEY" ] || {
-  echo "缺少 --server / --id / --key"; exit 1
+  echo "缺少连接参数：请使用面板生成的安装命令，或传 --server / --id / --key"; exit 1
 }
 
 # ---------- 探测架构 ----------

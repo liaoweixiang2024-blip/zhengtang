@@ -435,7 +435,19 @@ async fn add_server(
     let pubkey = signing.verifying_key().to_bytes();
     let secret_hex = data_encoding::HEXLOWER.encode(&secret);
 
-    let _ = state.store.with(|c| crate::store::insert_server(c, &agent_id, &body.name, &pubkey));
+    // 安装令牌（24h 限时；/a/{token} 据此下发免参数安装脚本；删除服务器即吊销）
+    let mut token_bytes = [0u8; 12];
+    rand::rng().fill_bytes(&mut token_bytes);
+    let install_token = data_encoding::HEXLOWER.encode(&token_bytes);
+    let token_expires = unix_now() + 24 * 3600;
+    let _ = state.store.with(|c| {
+        crate::store::insert_server(c, &agent_id, &body.name, &pubkey)?;
+        c.execute(
+            "UPDATE servers SET secret_key = ?1, install_token = ?2, install_token_expires = ?3 WHERE id = ?4",
+            rusqlite::params![secret_hex, install_token, token_expires, agent_id],
+        )?;
+        Ok(())
+    });
     let _ = state.reload_registry();
 
     let fingerprint = crate::tls::FINGERPRINT
@@ -453,6 +465,8 @@ async fn add_server(
         "install_cmd": format!(
             "zhengtang-agent --server {base}/ws/agent --id {agent_id} --key {secret_hex} --fingerprint {fingerprint}"
         ),
+        // 短安装命令：面板注入参数，目标机免参数执行
+        "install_cmd_short": format!("curl -kfsSL {base}/a/{install_token} | sh"),
     }))
     .into_response()
 }
