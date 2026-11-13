@@ -122,7 +122,8 @@ export function ServerCard({ server }: { server: ServerView }) {
   const online = server.online
   const upText = online ? (m ? `在线 ${fmtUptime(m.uptime_secs)}` : '在线') : m ? '离线' : '等待数据…'
 
-  const root = m?.disks.find((d) => d.mount === '/') ?? m?.disks[0]
+  // 取容量最大的挂载：NAS 数据卷（如 /volume1）常大于系统分区 /
+  const root = m?.disks.slice().sort((a, b) => b.total - a.total)[0]
   const diskPct = root && root.total > 0 ? (root.used / root.total) * 100 : null
   const memPct = m && m.mem_total > 0 ? (m.mem_used / m.mem_total) * 100 : null
   const quota = server.traffic_quota_bytes

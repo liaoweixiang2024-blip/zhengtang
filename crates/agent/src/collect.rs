@@ -178,7 +178,12 @@ impl Collector {
     /// 低频完整报告。
     pub fn full_report(&mut self) -> SystemInfo {
         self.sys.refresh_memory();
-        let disks_total: u64 = self.disk_list().iter().map(|d| d.total).sum();
+        let disks_total: u64 = self
+            .disk_list()
+            .iter()
+            .map(|d| d.total)
+            .max()
+            .unwrap_or(0);
 
         SystemInfo {
             hostname: System::host_name().unwrap_or_else(|_| "unknown".into()),
