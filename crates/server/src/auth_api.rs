@@ -1215,6 +1215,7 @@ struct SettingsBody {
     site_name: Option<String>,
     site_description: Option<String>,
     public_page_enabled: Option<bool>,
+    globe_enabled: Option<bool>,
 }
 
 async fn put_settings(
@@ -1240,6 +1241,9 @@ async fn put_settings(
             return err(StatusCode::BAD_REQUEST, "描述 ≤160 字符");
         }
         s.site_description = v;
+    }
+    if let Some(v) = body.globe_enabled {
+        s.globe_enabled = v;
     }
     if let Some(v) = body.public_page_enabled {
         s.public_page_enabled = v;

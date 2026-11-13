@@ -37,6 +37,7 @@ async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         "site_name": st.site_name,
         "site_description": st.site_description,
         "public_page_enabled": st.public_page_enabled,
+        "globe_enabled": st.globe_enabled,
     }))
 }
 

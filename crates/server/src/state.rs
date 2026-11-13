@@ -63,6 +63,8 @@ pub struct SiteSettings {
     pub site_description: String,
     /// 公开展示页总开关
     pub public_page_enabled: bool,
+    /// 节点地球（点亮世界地图）开关
+    pub globe_enabled: bool,
 }
 
 impl Default for SiteSettings {
@@ -71,6 +73,7 @@ impl Default for SiteSettings {
             site_name: "zhengtang".into(),
             site_description: "服务器在线状态与资源监控".into(),
             public_page_enabled: true,
+            globe_enabled: true,
         }
     }
 }
@@ -270,6 +273,7 @@ impl AppState {
             if let Some(v) = get("site_name") { s.site_name = v; }
             if let Some(v) = get("site_description") { s.site_description = v; }
             if let Some(v) = get("public_page_enabled") { s.public_page_enabled = v != "0"; }
+            if let Some(v) = get("globe_enabled") { s.globe_enabled = v != "0"; }
             Ok(())
         });
         s
@@ -281,6 +285,7 @@ impl AppState {
                 ("site_name", s.site_name.clone()),
                 ("site_description", s.site_description.clone()),
                 ("public_page_enabled", if s.public_page_enabled { "1".into() } else { "0".into() }),
+                ("globe_enabled", if s.globe_enabled { "1".into() } else { "0".into() }),
             ] {
                 c.execute(
                     "INSERT INTO settings (key, value) VALUES (?1, ?2)

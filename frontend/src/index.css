@@ -211,3 +211,8 @@
   .globe-reg { min-height: 32px; }
   .globe-rows { max-height: 232px; }
 }
+
+/* 点亮地图：国家 path 需要可点（.globe-atlas svg path 默认 pointer-events:none） */
+.globe-atlas svg path.map-country { pointer-events: auto; }
+.globe-atlas svg path.map-country:hover { fill-opacity: 0.75; }
+.globe-atlas svg circle { pointer-events: auto; }

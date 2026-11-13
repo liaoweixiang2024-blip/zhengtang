@@ -635,6 +635,7 @@ function SettingsTab() {
   const [siteName, setSiteName] = useState('')
   const [description, setDescription] = useState('')
   const [publicEnabled, setPublicEnabled] = useState(true)
+  const [globeEnabled, setGlobeEnabled] = useState(true)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [loaded, setLoaded] = useState(false)
@@ -647,6 +648,7 @@ function SettingsTab() {
         setSiteName(d.site_name ?? '')
         setDescription(d.site_description ?? '')
         setPublicEnabled(d.public_page_enabled !== false)
+        setGlobeEnabled(d.globe_enabled !== false)
         setLoaded(true)
       })
   }, [])
@@ -662,6 +664,7 @@ function SettingsTab() {
         site_name: siteName,
         site_description: description,
         public_page_enabled: publicEnabled,
+        globe_enabled: globeEnabled,
       }),
     })
     if (!res.ok) {
@@ -689,6 +692,15 @@ function SettingsTab() {
             <Label>站点描述（SEO）</Label>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="网页 meta description" maxLength={160} />
             <p className="text-xs text-muted-foreground">写入 &lt;meta name=description&gt;，供搜索引擎摘要（≤160 字符）</p>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <div className="text-sm font-medium">节点世界地图</div>
+              <div className="text-xs text-muted-foreground">
+                仪表盘概览下方的点亮地图与地区列表（关闭后不再显示）
+              </div>
+            </div>
+            <Switch checked={globeEnabled} onCheckedChange={setGlobeEnabled} />
           </div>
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
