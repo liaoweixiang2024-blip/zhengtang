@@ -87,7 +87,7 @@ function UserMenu({
       const b = root.current?.getBoundingClientRect()
       const host = root.current?.closest<HTMLElement>('header')
       const h = host?.getBoundingClientRect()
-      if (b && host && h) setSpot({ host, top: b.bottom - h.top + 4, right: h.right - b.right })
+      if (b && host && h) setSpot({ host, top: b.bottom - h.top, right: h.right - b.right })
     }
     place()
     window.addEventListener('resize', place)
@@ -111,7 +111,7 @@ function UserMenu({
 
   const admin = me.role === 'admin'
   const item =
-    'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent'
+    'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm outline-none transition-colors hover:bg-accent'
 
   return (
     <div
@@ -135,37 +135,46 @@ function UserMenu({
           ref={menu}
           role="menu"
           style={{ top: spot.top, right: spot.right }}
-          className="absolute z-50 block w-44 overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
+          className="absolute z-50 block w-52 pt-1"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
         >
-          {!admin && (
-            <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); navigate('/alerts') }}>
-              <Bell className="size-4" />
-              告警中心
-            </button>
-          )}
-          {admin &&
-            NAV.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                type="button"
-                role="menuitem"
-                className={item}
-                onClick={() => { setOpen(false); navigate(`/admin?tab=${key}`) }}
-              >
-                <Icon className="size-4" />
-                {label}
+          <div className="overflow-hidden rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-xl">
+            <div className="px-2.5 pb-1.5 pt-1">
+              <div className="truncate text-sm font-medium">{me.username}</div>
+              <div className="text-xs text-muted-foreground">{admin ? '管理员' : '观察者'}</div>
+            </div>
+            <div className="my-1 h-px bg-border" />
+            {!admin && (
+              <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); navigate('/alerts') }}>
+                <Bell className="size-4 shrink-0 text-muted-foreground" />
+                告警中心
               </button>
-            ))}
-          <div className="my-1 h-px bg-border" />
-          <button
-            type="button"
-            role="menuitem"
-            className={cn(item, 'text-destructive hover:text-destructive')}
-            onClick={() => { setOpen(false); onLogout() }}
-          >
-            <LogOut className="size-4" />
-            退出登录
-          </button>
+            )}
+            {admin &&
+              NAV.map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  onClick={() => { setOpen(false); navigate(`/admin?tab=${key}`) }}
+                >
+                  <Icon className="size-4 shrink-0 text-muted-foreground" />
+                  {label}
+                </button>
+              ))}
+            <div className="my-1 h-px bg-border" />
+            <button
+              type="button"
+              role="menuitem"
+              className={cn(item, 'text-destructive hover:bg-destructive/10 hover:text-destructive')}
+              onClick={() => { setOpen(false); onLogout() }}
+            >
+              <LogOut className="size-4 shrink-0" />
+              退出登录
+            </button>
+          </div>
         </div>,
         spot.host,
       )}

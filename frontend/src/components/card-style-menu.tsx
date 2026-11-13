@@ -69,7 +69,7 @@ export function CardStyleMenu({ value, onPick }: {
           role="menu"
           aria-label="卡片形态"
           style={{ top: spot.top, right: spot.right }}
-          className="absolute z-20 block w-36 overflow-hidden rounded-md border bg-popover py-1 text-sm shadow-md"
+          className="absolute z-50 block w-40 overflow-hidden rounded-xl border bg-popover p-1.5 text-sm shadow-xl"
         >
           {STYLES.map(({ value: v, label, Icon }) => (
             <button
@@ -77,7 +77,7 @@ export function CardStyleMenu({ value, onPick }: {
               type="button"
               role="menuitemradio"
               aria-checked={v === value}
-              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-accent"
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors hover:bg-accent"
               onClick={() => {
                 onPick(v)
                 setOpen(false)

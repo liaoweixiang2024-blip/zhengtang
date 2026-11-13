@@ -218,10 +218,12 @@ function Block({
     if (!hasRows) return
     const r = ref.current?.getBoundingClientRect()
     if (r) {
+      // top 贴住块底（零间隙）：容器把视觉间距吃进自身 padding，
+      // 鼠标从块移进面板全程都在悬停区内，不会中途触发关闭
       setSpot(
         align === 'right'
-          ? { top: r.bottom + 6, right: window.innerWidth - r.right }
-          : { top: r.bottom + 6, left: r.left },
+          ? { top: r.bottom, right: window.innerWidth - r.right }
+          : { top: r.bottom, left: r.left },
       )
     }
     setOpen(true)
@@ -241,9 +243,11 @@ function Block({
         createPortal(
           <div
             style={{ position: 'fixed', top: spot.top, ...(spot.left != null ? { left: spot.left } : { right: spot.right }) }}
-            className="z-[70] w-64 max-w-[80vw]"
+            className="z-[70] w-64 max-w-[80vw] pt-1.5"
+            onMouseEnter={() => setOpen(true)}
+            onMouseLeave={() => setOpen(false)}
           >
-            <div className="max-h-60 overflow-y-auto rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-lg">
+            <div className="max-h-60 overflow-y-auto rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-xl">
               <div className="px-2 pb-1 pt-0.5 text-xs font-medium text-muted-foreground">{title} · 明细</div>
               {rows!.map((r, i) => (
                 <div key={i} className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs">
