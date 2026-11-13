@@ -58,14 +58,20 @@ tar -xzf "$TMP/agent.tar.gz" -C "$TMP"
 AGENT_BIN=$(find "$TMP" -type f -name zhengtang-agent | head -1)
 [ -n "$AGENT_BIN" ] || { echo "包内未找到 zhengtang-agent"; exit 1; }
 install -m 0755 "$AGENT_BIN" /usr/local/bin/zhengtang-agent
+# 专用低权用户（DynamicUser 的动态 uid 读不了 0600 配置，导致启动即退）
+id zhengtang-agent >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin zhengtang-agent
 mkdir -p /etc/zhengtang
-chmod 0700 /etc/zhengtang
+chmod 0755 /etc/zhengtang
+# fingerprint 行预组装：${var:+...} 内的引号会被 bash 吃掉，裸值会被 TOML 当数字
+FP_LINE=""
+[ -n "$FINGERPRINT" ] && FP_LINE="fingerprint = \"$FINGERPRINT\""
 cat > /etc/zhengtang/agent.toml <<EOF
 server = "$SERVER"
 id = "$ID"
 key = "$KEY"
-${FINGERPRINT:+fingerprint = "$FINGERPRINT"}
+$FP_LINE
 EOF
+chown zhengtang-agent:zhengtang-agent /etc/zhengtang/agent.toml
 chmod 0600 /etc/zhengtang/agent.toml
 
 # ---------- systemd ----------
@@ -77,7 +83,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-DynamicUser=yes
+User=zhengtang-agent
 ExecStart=/usr/local/bin/zhengtang-agent --config /etc/zhengtang/agent.toml
 Restart=always
 RestartSec=5
