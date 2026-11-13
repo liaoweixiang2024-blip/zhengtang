@@ -216,3 +216,28 @@
 .globe-atlas svg path.map-country { pointer-events: auto; }
 .globe-atlas svg path.map-country:hover { fill-opacity: 0.75; }
 .globe-atlas svg circle { pointer-events: auto; }
+
+/* 后台侧边栏嵌在 1280px 内容容器里：桌面端改为容器内相对布局
+   （官方默认视口 fixed 会让侧栏飞出容器、且被顶栏遮住顶部）。
+   窄屏 offcanvas 全屏抽屉保持官方行为。 */
+@media (min-width: 768px) {
+  /* 官方布局 = gap 占位条 + fixed 悬浮容器；容器内模式：藏掉占位条，
+     把 fixed 容器放回文档流（与内容区在 provider 的 flex 行内并排） */
+  [data-slot="sidebar-gap"] { display: none !important; }
+  [data-slot="sidebar-container"] {
+    position: static !important;
+    inset: auto !important;
+    height: auto !important;
+    z-index: 0 !important;
+  }
+}
+
+/* 后台侧栏（容器内布局）：官方 provider/inset 自带 min-h-svh 会从顶栏下再撑满一屏
+   导致页面多出 60px 纵向滚动，高度改随内容 */
+@media (min-width: 768px) {
+  [data-sidebar="sidebar"],
+  [data-sidebar="inset"] {
+    min-height: 0 !important;
+    height: auto !important;
+  }
+}

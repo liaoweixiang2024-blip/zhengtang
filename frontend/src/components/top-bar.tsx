@@ -1,6 +1,5 @@
 // 全站统一顶栏（jikasei 同款结构）：
 // 站名（图标+粗体，hover 透明度）… 弹性空隙 … 搜索 | 图标条带（账号/卡片形态/主题）
-import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -70,7 +69,8 @@ export function TopBar(props: {
   )
 }
 
-/** 账号菜单：shadcn DropdownMenu（悬停展开：受控 + 160ms 关闭缓冲，可从容移入） */
+/** 账号菜单：shadcn DropdownMenu（点击展开——Radix 原生行为，悬停受控会与
+ *  浮层定位形成开合循环导致闪烁） */
 function UserMenu({
   me, navigate, onLogout,
 }: {
@@ -78,34 +78,15 @@ function UserMenu({
   navigate: (h: string, replace?: boolean) => void
   onLogout: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const timer = useRef<number | undefined>(undefined)
-  const enter = () => {
-    window.clearTimeout(timer.current)
-    setOpen(true)
-  }
-  const leave = () => {
-    window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setOpen(false), 160)
-  }
   const admin = me.role === 'admin'
-
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          title={`${me.username} · 账号菜单`}
-          aria-label="账号菜单"
-          onMouseEnter={enter}
-          onMouseLeave={leave}
-          onClick={() => setOpen((v) => !v)}
-        >
+        <Button variant="ghost" size="icon" title={`${me.username} · 账号菜单`} aria-label="账号菜单">
           <UserRound />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52" onMouseEnter={enter} onMouseLeave={leave}>
+      <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuLabel>
           <div className="truncate text-sm font-medium">{me.username}</div>
           <div className="text-xs font-normal text-muted-foreground">{admin ? '管理员' : '观察者'}</div>

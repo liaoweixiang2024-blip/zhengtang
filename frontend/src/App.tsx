@@ -206,7 +206,7 @@ function Main(props: {
       )
     }
     return (
-      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare full>
+      <Shell siteName={siteName} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         <Admin
           tab={parseAdminTab(path.split('?')[1] ?? '')}
           onTabChange={(k) => navigate(`/admin?tab=${k}`, true)}
