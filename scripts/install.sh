@@ -87,5 +87,60 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now zhengtang-agent
+
+# ---------- 快捷管理命令 zt-agent ----------
+# 装好后即可用：zt-agent status|log|restart|stop|start|upgrade|uninstall
+cat > /usr/local/bin/zt-agent <<'ZTEOF'
+#!/usr/bin/env bash
+# zhengtang-agent 快捷管理
+set -euo pipefail
+BASE_URL="${ZT_BASE_URL:-https://github.com/zhengtang/zhengtang/releases}"
+case "$1" in
+  status)  systemctl status zhengtang-agent --no-pager ;;
+  log|logs) journalctl -u zhengtang-agent -f ;;
+  restart) systemctl restart zhengtang-agent && echo "✓ 已重启" ;;
+  stop)    systemctl stop zhengtang-agent && echo "✓ 已停止" ;;
+  start)   systemctl start zhengtang-agent && echo "✓ 已启动" ;;
+  upgrade)
+    ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64)       TARGET="x86_64-unknown-linux-musl" ;;
+      aarch64|arm64) TARGET="aarch64-unknown-linux-musl" ;;
+      armv7l|armv7)  TARGET="armv7-unknown-linux-musleabihf" ;;
+      *) echo "不支持的架构: $ARCH"; exit 1 ;;
+    esac
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+    echo "下载 $BASE_URL/latest/download/zhengtang-agent-$TARGET.tar.gz"
+    curl -fsSL "$BASE_URL/latest/download/zhengtang-agent-$TARGET.tar.gz" -o "$TMP/a.tgz"
+    tar -xzf "$TMP/a.tgz" -C "$TMP"
+    install -m 0755 "$TMP/zhengtang-agent" /usr/local/bin/zhengtang-agent
+    systemctl restart zhengtang-agent
+    echo "✓ 已升级到最新版并重启"
+    ;;
+  uninstall)
+    echo "将停止并删除 zhengtang-agent（含 /etc/zhengtang/agent.toml 私钥配置）"
+    read -r -p "确定? 输入 yes 确认: " ok
+    [ "$ok" = "yes" ] || { echo "已取消"; exit 0; }
+    systemctl disable --now zhengtang-agent || true
+    rm -f /etc/systemd/system/zhengtang-agent.service /usr/local/bin/zhengtang-agent /usr/local/bin/zt-agent
+    rm -rf /etc/zhengtang
+    systemctl daemon-reload
+    echo "✓ 已卸载（面板上该机器会显示离线；如需彻底清除请到后台删除该服务器）"
+    ;;
+  *)
+    cat <<'USAGE'
+zt-agent — zhengtang 探针管理
+  status     查看运行状态
+  log        跟随实时日志
+  start|stop|restart  启停/重启
+  upgrade    升级到最新版并重启
+  uninstall  卸载（删除服务/二进制/配置，需确认）
+USAGE
+    ;;
+esac
+ZTEOF
+chmod 0755 /usr/local/bin/zt-agent
+
 echo "✓ zhengtang-agent 已安装并启动（systemd 单元含沙箱加固）"
 echo "  日志: journalctl -u zhengtang-agent -f"
+echo "  快捷命令: zt-agent status | log | restart | upgrade | uninstall"

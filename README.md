@@ -47,6 +47,23 @@ zhengtang-agent \
   --id <agent_id> --key <私钥> --fingerprint <指纹>
 ```
 
+### 安装好之后：zt-agent 快捷命令
+
+安装脚本会同时装一个 `zt-agent` 管理命令（Linux/systemd 环境）：
+
+```bash
+zt-agent status      # 运行状态
+zt-agent log         # 实时日志（Ctrl+C 退出）
+zt-agent restart     # 重启
+zt-agent stop        # 停止
+zt-agent start       # 启动
+zt-agent upgrade     # 升级到最新版并重启
+zt-agent uninstall   # 卸载（删服务/二进制/含私钥的配置，需输入 yes 确认）
+```
+
+等价的 systemd 原生命令：`systemctl status|restart|stop zhengtang-agent`、
+`journalctl -u zhengtang-agent -f`。
+
 ### 私有部署的安装脚本分发
 
 服务端可反代 `/install.sh`（放入 `data/` 目录由你的反代/对象存储提供），release 页也带脚本。
