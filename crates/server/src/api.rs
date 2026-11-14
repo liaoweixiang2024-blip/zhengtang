@@ -151,9 +151,29 @@ struct HistoryQuery {
 /// 历史指标：≤24h 用 1min 粒度，≥7d 用 1h 粒度（降采样行）。
 async fn history(
     State(state): State<Arc<AppState>>,
+    jar: axum_extra::extract::CookieJar,
     Path(id): Path<String>,
     Query(q): Query<HistoryQuery>,
 ) -> impl IntoResponse {
+    // 登录 + 组权限（口径同 dial-results；id 会出现在分享链接 /server/{id} 里，
+    // 不设防等于任何人可拉走 CPU/内存/网络历史）
+    let Some(user) = crate::auth::current_user(&state, &jar) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "未登录" })),
+        )
+            .into_response();
+    };
+    let group_id: Option<Option<i64>> = state
+        .store
+        .with(|c| Ok(c.query_row("SELECT group_id FROM servers WHERE id = ?1", [&id], |r| r.get(0)).ok()))
+        .unwrap_or(None);
+    let Some(group_id) = group_id else {
+        return (StatusCode::NOT_FOUND, Json(json!({ "error": "服务器不存在" }))).into_response();
+    };
+    if !server_visible_to(&user, group_id) {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "无权访问" }))).into_response();
+    }
     let range = q.range.as_deref().unwrap_or("1h");
     let (secs, granularity): (i64, i64) = match range {
         "1h" => (3600, 1),

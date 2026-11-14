@@ -301,8 +301,10 @@ function Block({
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
           >
-            {/* 顶角直角 + 去上边框：贴住块底时像卡片向下"加载"出的一段，不是贴上去的浮层 */}
-            <div className="max-h-64 animate-in fade-in-0 slide-in-from-top-1 overflow-y-auto rounded-b-xl border border-t-0 border-border/80 bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/5 duration-150">
+            {/* 顶角直角 + 去上边框：贴住块底时像卡片向下"加载"出的一段，不是贴上去的浮层。
+                overscroll-contain：列表滚到头后滚动不再"链"到页面——鼠标在面板里滚，
+                只有列表动，页面不动 */}
+            <div className="max-h-64 animate-in fade-in-0 slide-in-from-top-1 overflow-y-auto overscroll-contain rounded-b-xl border border-t-0 border-border/80 bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/5 duration-150">
               <div className="flex items-baseline justify-between gap-2 px-2 pb-1 pt-1">
                 <span className="text-xs font-medium">{title}</span>
                 <span className="text-[10px] text-muted-foreground">每机明细 · {rows!.length}</span>

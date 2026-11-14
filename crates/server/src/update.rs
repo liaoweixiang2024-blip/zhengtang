@@ -120,6 +120,11 @@ pub async fn download(state: &AppState, version: &str) -> Result<PathBuf, String
         return Err("版本号格式应为 vX.Y.Z（如 v0.2.3）".into());
     }
     let base = update_base(state);
+    // 兜底拦截历史设置里已存的 http:// 源：sha256 与二进制同源下载，
+    // 明文源上中间人可同时替换两者使校验失效（设置侧已禁录新值）
+    if base.starts_with("http://") {
+        return Err("更新源必须使用 https://（站点设置里把源改为 https 前缀后重试）".into());
+    }
     let file = format!("zhengtang-server-{target}.tar.gz");
     let url = format!("{base}/download/{version}/{file}");
 

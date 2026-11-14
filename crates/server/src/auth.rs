@@ -191,15 +191,51 @@ pub fn audit(conn: &Connection, user_id: Option<i64>, action: &str, detail: &str
     );
 }
 
-/// 从请求头取客户端 IP（反代场景信任 X-Forwarded-For 首段）。
+/// 从请求头取客户端 IP。
+/// 仅当 TCP 对端是回环/私网（本机反代/frp 穿透）时才信任 X-Forwarded-For——
+/// 公网直连下该头由客户端任意伪造，若无条件采信，登录防爆破的 key
+/// （ip|username）可随伪造头无限变化，指数退避永不触发。
 pub fn client_ip(headers: &axum::http::HeaderMap, peer: Option<std::net::SocketAddr>) -> String {
-    headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.split(',').next())
-        .map(|s| s.trim().to_string())
-        .or_else(|| peer.map(|p| p.ip().to_string()))
-        .unwrap_or_else(|| "unknown".into())
+    let peer_ip = peer.map(|p| p.ip().to_string());
+    let trust_xff = peer_ip.as_deref().map(crate::auth_api::is_private_ip).unwrap_or(true);
+    if trust_xff {
+        if let Some(ip) = headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(',').next())
+            .map(str::trim)
+            .filter(|v| v.parse::<std::net::IpAddr>().is_ok())
+        {
+            return ip.to_string();
+        }
+    }
+    peer_ip.unwrap_or_else(|| "unknown".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headers(xff: &str) -> axum::http::HeaderMap {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert("x-forwarded-for", xff.parse().unwrap());
+        h
+    }
+
+    fn addr(ip: &str) -> std::net::SocketAddr {
+        format!("{ip}:12345").parse().unwrap()
+    }
+
+    #[test]
+    fn xff_only_trusted_from_private_peer() {
+        // 公网直连：伪造 XFF 必须被忽略（防爆破绕过）
+        assert_eq!(client_ip(&headers("1.2.3.4"), Some(addr("5.6.7.8"))), "5.6.7.8");
+        // 本机反代（私网对端）：XFF 首段可信
+        assert_eq!(client_ip(&headers("1.2.3.4, 10.0.0.1"), Some(addr("127.0.0.1"))), "1.2.3.4");
+        assert_eq!(client_ip(&headers("1.2.3.4"), Some(addr("192.168.1.1"))), "1.2.3.4");
+        // 私网对端但 XFF 非法：回落到对端 IP
+        assert_eq!(client_ip(&headers("not-an-ip"), Some(addr("127.0.0.1"))), "127.0.0.1");
+    }
 }
 
 /// AppState 上的便捷封装。

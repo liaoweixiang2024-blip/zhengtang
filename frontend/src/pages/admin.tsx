@@ -13,7 +13,6 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { guessRegion } from '@/lib/guess-region'
 import { CYCLE_LABEL, CURRENCY_SYMBOL, fmtCost, monthlyCostByCurrency } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { Bell, Info, ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2, KeyRound } from 'lucide-react'
@@ -1142,7 +1141,8 @@ function EditServerDialog({
   const [price, setPrice] = useState(server.price_per_cycle != null ? String(server.price_per_cycle) : '')
   const [currency, setCurrency] = useState(server.currency ?? 'CNY')
   // 地区为空时按机器名猜一个默认值（jikasei 同款城市线索），保存才落库
-  const [region, setRegion] = useState(server.region ?? guessRegion(server.name) ?? 'none')
+  // 地区纯手动：不预填、不查询，默认「未设置」
+  const [region, setRegion] = useState(server.region ?? 'none')
   const [publicVisible, setPublicVisible] = useState(server.public_visible)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1215,26 +1215,9 @@ function EditServerDialog({
               </Select>
             </Field>
             <Field label="地区">
-              <Select
-                value={region}
-                onValueChange={async (v) => {
-                  if (v === '__auto__') {
-                    setError('')
-                    const res = await fetch(`/api/admin/servers/${server.id}/detect-region`, { method: 'POST' })
-                    const d = await res.json()
-                    if (!res.ok) {
-                      setError(d.error ?? '识别失败')
-                      return
-                    }
-                    setRegion(d.region)
-                    return
-                  }
-                  setRegion(v)
-                }}
-              >
+              <Select value={region} onValueChange={setRegion}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__auto__">🔄 自动识别（按连接 IP）</SelectItem>
                   <SelectItem value="none">未设置</SelectItem>
                   {REGIONS.map((r) => (
                     <SelectItem key={r} value={r}>{r}</SelectItem>

@@ -66,8 +66,6 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/servers/{id}/dial-results", get(dial_results))
         // 分组名（仪表盘分组标签用，登录用户；viewer 只见其授权组）
         .route("/api/groups", get(my_groups))
-        // 地区自动识别（按 agent 连接 IP 查询归属地）
-        .route("/api/admin/servers/{id}/detect-region", post(detect_region))
 }
 
 /// 判断是否私网/回环地址（无法公网定位）。
@@ -89,131 +87,9 @@ pub(crate) fn is_private_ip(ip: &str) -> bool {
     false
 }
 
-/// ISO 国家码 → 国旗 emoji（🇭🇰）
-fn flag_of(code: &str) -> String {
-    let c: Vec<char> = code.chars().filter(|c| c.is_ascii_alphabetic()).collect();
-    if c.len() < 2 {
-        return String::new();
-    }
-    let a = 0x1F1E6 + (c[0] as u32 - 'A' as u32);
-    let b = 0x1F1E6 + (c[1] as u32 - 'A' as u32);
-    format!("{}{}", char::from_u32(a).unwrap_or('🇦'), char::from_u32(b).unwrap_or('🇦'))
-}
-
-/// 自动识别（agent 上线时调用）：region 已设或出口 IP 是内网则跳过，成功写入并广播。
-/// 哪吒同款体验——机器一连上，地区自动就位，无需任何人手动点。
-pub(crate) async fn auto_detect_region(state: &Arc<AppState>, id: &str) {
-    let (region, ip): (Option<String>, Option<String>) = state
-        .store
-        .with(|c| {
-            Ok(c.query_row(
-                "SELECT region, last_ip FROM servers WHERE id = ?1",
-                [id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )?)
-        })
-        .unwrap_or((None, None));
-    if region.is_some() {
-        return;
-    }
-    let Some(ip) = ip.filter(|v| !v.is_empty()) else { return };
-    if is_private_ip(&ip) {
-        return; // frp 纯 TCP 未开 PPv2 等场景：拿不到真实出口，静默留给手填/名字猜
-    }
-    if let Some(reg) = query_region_by_ip(&ip).await {
-        let _ = state.store.with(|c| {
-            c.execute("UPDATE servers SET region = ?1 WHERE id = ?2", rusqlite::params![reg, id])?;
-            Ok(())
-        });
-        if let Some(v) = state.server_view(id) {
-            let _ = state.dash_tx.send(crate::state::DashboardEvent::Update { server: v });
-        }
-        tracing::info!(server = id, ip = %ip, region = %reg, "地区自动识别完成");
-    }
-}
-
-/// ip-api 查询归属地 → "🇭🇰 香港"（失败返回 None）。
-async fn query_region_by_ip(ip: &str) -> Option<String> {
-    let url = format!("http://ip-api.com/json/{ip}?fields=status,countryCode,country&lang=zh-CN");
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .ok()?;
-    let json: serde_json::Value = client.get(&url).send().await.ok()?.json().await.ok()?;
-    if json["status"].as_str() != Some("success") {
-        return None;
-    }
-    let code = json["countryCode"].as_str()?.to_uppercase();
-    if code.len() != 2 {
-        return None;
-    }
-    let country = json["country"].as_str().unwrap_or(&code).to_string();
-    Some(if country.is_empty() { code } else { format!("{} {}", flag_of(&code), country) })
-}
-
-/// 地区自动识别：按该机 agent 最近连接 IP 查询归属地（ip-api.com，仅传 IP），
-/// 成功则写入 region（"🇭🇰 香港" 格式）并广播。
-async fn detect_region(
-    State(state): State<Arc<AppState>>,
-    jar: CookieJar,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
-    if let Err(e) = require_admin(&state, &jar) {
-        return e;
-    }
-    let ip: Option<String> = state
-        .store
-        .with(|c| Ok(c.query_row("SELECT last_ip FROM servers WHERE id = ?1", [&id], |r| r.get(0)).ok()))
-        .ok()
-        .flatten();
-    let Some(ip) = ip.filter(|ip| !ip.is_empty()) else {
-        return err(StatusCode::BAD_REQUEST, "该服务器还没有连接记录，无法识别");
-    };
-    if is_private_ip(&ip) {
-        return err(
-            StatusCode::BAD_REQUEST,
-            &format!(
-                "连接 IP {ip} 是内网地址，无法识别地区。\n面板与 agent 之间经过了内网穿透（如 frp）或反代，真实公网 IP 没有传到面板；\
-                 反代场景可在反代层加 X-Forwarded-For 头，纯 TCP 穿透场景请直接在地区下拉中手动选择。"
-            ),
-        );
-    }
-    // ip-api.com 免费接口（无 key，仅传 IP 与语言参数；5s 超时）
-    let url = format!("http://ip-api.com/json/{ip}?fields=status,countryCode,country&lang=zh-CN");
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => return err(StatusCode::BAD_GATEWAY, &format!("查询失败：{e}")),
-    };
-    let resp = match client.get(&url).send().await {
-        Ok(r) => r,
-        Err(e) => return err(StatusCode::BAD_GATEWAY, &format!("查询失败：{e}")),
-    };
-    let json: serde_json::Value = match resp.json().await {
-        Ok(j) => j,
-        Err(e) => return err(StatusCode::BAD_GATEWAY, &format!("解析失败：{e}")),
-    };
-    if json["status"].as_str() != Some("success") {
-        return err(StatusCode::BAD_GATEWAY, "归属地服务查询失败");
-    }
-    let code = json["countryCode"].as_str().unwrap_or("").to_uppercase();
-    let country = json["country"].as_str().unwrap_or(&code).to_string();
-    if code.len() != 2 {
-        return err(StatusCode::BAD_GATEWAY, "归属地返回异常");
-    }
-    let region = if country.is_empty() { code.clone() } else { format!("{} {}", flag_of(&code), country) };
-    let _ = state.store.with(|c| {
-        c.execute("UPDATE servers SET region = ?1 WHERE id = ?2", rusqlite::params![region, id])?;
-        Ok(())
-    });
-    if let Some(v) = state.server_view(&id) {
-        let _ = state.dash_tx.send(crate::state::DashboardEvent::Update { server: v });
-    }
-    tracing::info!(server = %id, ip = %ip, region = %region, "地区自动识别完成");
-    (StatusCode::OK, Json(json!({ "ok": true, "region": region }))).into_response()
-}
+// 地区识别已按站长要求整体移除（2026-11-16）：被监控机的公网 IP 不出面板——
+// 不再有任何"按 IP 查归属地"的网络请求（无论自动还是手动），
+// 地区一律在编辑对话框的下拉里手动选择。last_ip 字段仅存库不外发。
 
 // ---------- 站点 LOGO ----------
 
@@ -596,7 +472,9 @@ async fn change_password(
     let _ = state.store.with(|c| {
         c.execute("UPDATE users SET password_hash = ?1 WHERE id = ?2", rusqlite::params![new_hash, user.id])?;
         c.execute(
-            "DELETE FROM sessions WHERE user_id = ?1 AND token != ?2",
+            // sessions 主键列是 id（此前误写成 token，SQL 报错被吞，
+            // 导致改密后旧会话不下线）
+            "DELETE FROM sessions WHERE user_id = ?1 AND id != ?2",
             rusqlite::params![user.id, cur_token],
         )?;
         Ok(())
@@ -1669,9 +1547,10 @@ async fn put_settings(
         if v.len() > 256 {
             return err(StatusCode::BAD_REQUEST, "更新源地址过长");
         }
-        // 只接受 https:// 前缀（空串恢复默认）
-        if !v.is_empty() && !v.starts_with("https://") && !v.starts_with("http://") {
-            return err(StatusCode::BAD_REQUEST, "更新源必须以 http(s):// 开头");
+        // 只接受 https:// 前缀（空串恢复默认）。sha256 与二进制同源下载，
+        // http 源上中间人可同时替换两者使校验失效——供应链面不放明文
+        if !v.is_empty() && !v.starts_with("https://") {
+            return err(StatusCode::BAD_REQUEST, "更新源必须以 https:// 开头（明文 http 源不可信）");
         }
         s.update_base = v;
     }

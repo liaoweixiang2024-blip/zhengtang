@@ -163,19 +163,26 @@ async fn serve(data_dir: &PathBuf, listen: &str, http: bool, metrics_interval: u
     // 手动 accept：TLS 与明文共用一条路径，且 accept 后先 peek PPv2 头——
     // frp 纯 TCP 穿透把源 IP 丢成 127.0.0.1，frpc 开 transport.proxyProtocolVersion=v2
     // 后转发流头部带真实来源地址；取出来替换 peer，last_ip/地区识别/审计 IP 全链路受益。
+    // PPv2 头本身无鉴权：仅当 TCP 对端是回环/私网（frpc/反代与面板同机或同内网，
+    // 本就是信任边界内）时才解析；公网直连的连接带 PPv2 头一律不采信——
+    // 否则任意客户端可伪造源 IP 污染审计/last_ip/绕过登录爆破锁。
     // 普通直连 peek 一字节即放行，零开销
     loop {
         let (mut tcp, peer) = listener.accept().await?;
         let acceptor = acceptor.clone();
         let app = app.clone();
         tokio::spawn(async move {
-            let peer = match ppv2::maybe_proxied(&mut tcp).await {
-                Ok(Some(real)) => real,
-                Ok(None) => peer,
-                Err(e) => {
-                    tracing::debug!(%peer, error = %e, "连接异常（PPv2 探测阶段断开）");
-                    return;
+            let peer = if ppv2_trusted(&peer) {
+                match ppv2::maybe_proxied(&mut tcp).await {
+                    Ok(Some(real)) => real,
+                    Ok(None) => peer,
+                    Err(e) => {
+                        tracing::debug!(%peer, error = %e, "连接异常（PPv2 探测阶段断开）");
+                        return;
+                    }
                 }
+            } else {
+                peer
             };
             // TLS 流与裸 TCP 各自走泛型 serve_conn（多 trait 合不成一个 dyn 对象）
             match acceptor {
@@ -192,6 +199,11 @@ async fn serve(data_dir: &PathBuf, listen: &str, http: bool, metrics_interval: u
             };
         });
     }
+}
+
+/// PPv2 解析的信任边界：仅回环/私网对端（frpc、nginx 等本机/内网转发者）。
+fn ppv2_trusted(peer: &SocketAddr) -> bool {
+    peer.ip().is_loopback() || auth_api::is_private_ip(&peer.ip().to_string())
 }
 
 /// 单条连接：注入 ConnectInfo（含 PPv2 还原的真实源 IP）后交给 hyper
