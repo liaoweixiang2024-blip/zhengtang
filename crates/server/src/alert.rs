@@ -302,7 +302,7 @@ fn load_channels(state: &Arc<AppState>) -> Vec<Channel> {
     state
         .store
         .with(|c| {
-            let mut stmt = c.prepare("SELECT id, type, config FROM notify_channels")?;
+            let mut stmt = c.prepare("SELECT id, type, config FROM notify_channels WHERE enabled = 1")?;
             let rows = stmt
                 .query_map([], |r| {
                     Ok(Channel {

@@ -54,7 +54,7 @@ pub fn router() -> Router<Arc<AppState>> {
         // 告警
         .route("/api/alerts/events", get(alert_events))
         .route("/api/admin/channels", get(list_channels).post(add_channel))
-        .route("/api/admin/channels/{id}", delete(delete_channel))
+        .route("/api/admin/channels/{id}", delete(delete_channel).patch(update_channel))
         .route("/api/admin/channels/{id}/test", post(test_channel))
         // 拨测任务
         .route("/api/admin/servers/{id}/dial-tasks", get(list_dial_tasks).post(add_dial_task))
@@ -1170,10 +1170,17 @@ async fn list_channels(State(state): State<Arc<AppState>>, jar: CookieJar) -> im
     let channels = state
         .store
         .with(|c| {
-            let mut stmt = c.prepare("SELECT id, type, name FROM notify_channels ORDER BY id")?;
+            let mut stmt = c.prepare("SELECT id, type, name, config, enabled FROM notify_channels ORDER BY id")?;
             let rows = stmt
                 .query_map([], |r| {
-                    Ok(json!({ "id": r.get::<_, i64>(0)?, "type": r.get::<_, String>(1)?, "name": r.get::<_, String>(2)? }))
+                    let cfg: String = r.get(3)?;
+                    Ok(json!({
+                        "id": r.get::<_, i64>(0)?,
+                        "type": r.get::<_, String>(1)?,
+                        "name": r.get::<_, String>(2)?,
+                        "config": serde_json::from_str::<serde_json::Value>(&cfg).unwrap_or(serde_json::Value::Null),
+                        "enabled": r.get::<_, i64>(4)? != 0,
+                    }))
                 })?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             Ok(rows)
@@ -1208,6 +1215,54 @@ async fn add_channel(
         Ok(())
     });
     auth::audit_state(&state, Some(&admin), "add_channel", &body.name, &auth::client_ip(&headers, Some(peer)));
+    Json(json!({ "ok": true })).into_response()
+}
+
+#[derive(Deserialize)]
+struct UpdateChannelBody {
+    name: Option<String>,
+    config: Option<serde_json::Value>,
+    enabled: Option<bool>,
+}
+
+/// 编辑渠道：改名 / 改配置 / 启停（不动的字段保持原值）。
+async fn update_channel(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    jar: CookieJar,
+    Path(id): Path<i64>,
+    Json(body): Json<UpdateChannelBody>,
+) -> impl IntoResponse {
+    let Ok(admin) = require_admin(&state, &jar) else {
+        return err(StatusCode::FORBIDDEN, "需要管理员权限");
+    };
+    let rows = state
+        .store
+        .with(|c| {
+            let mut n = 0;
+            if let Some(v) = &body.name {
+                n += c.execute("UPDATE notify_channels SET name = ?1 WHERE id = ?2", rusqlite::params![v.trim(), id])?;
+            }
+            if let Some(v) = &body.config {
+                n += c.execute(
+                    "UPDATE notify_channels SET config = ?1 WHERE id = ?2",
+                    rusqlite::params![v.to_string(), id],
+                )?;
+            }
+            if let Some(v) = body.enabled {
+                n += c.execute(
+                    "UPDATE notify_channels SET enabled = ?1 WHERE id = ?2",
+                    rusqlite::params![if v { 1 } else { 0 }, id],
+                )?;
+            }
+            Ok(n)
+        })
+        .unwrap_or(0);
+    if rows == 0 {
+        return err(StatusCode::NOT_FOUND, "渠道不存在或没有可更新字段");
+    }
+    auth::audit_state(&state, Some(&admin), "update_channel", &format!("渠道 {id}"), &auth::client_ip(&headers, Some(peer)));
     Json(json!({ "ok": true })).into_response()
 }
 
