@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 
 /**
  * 数值平滑：目标值变化时在 duration 内缓动插值（rAF），数字"滑"过去而不是 3 秒一跳。
- * 站长口径：概览/卡片每 3s 刷新一次，600ms 的 easeOutCubic 正好在两次刷新间
- * 完成过渡、又不拖泥带水。NaN/Infinity（离线无数据）直接跳变不插值。
+ * 节奏口径（2026-11-15 调优）：概览/卡片每 3s 刷新，600ms 完成时数字翻得太快太忙，
+ * 放缓到 1600ms——缓动绵长、每帧变化量小，观感是"缓缓逼近"而不是"快速翻动"。
+ * NaN/Infinity（离线无数据）直接跳变不插值。
  */
-export function useSmoothNumber(target: number, duration = 600): number {
+export function useSmoothNumber(target: number, duration = 1600): number {
   const [display, setDisplay] = useState(target)
   const fromRef = useRef(target)
   const rafRef = useRef(0)
