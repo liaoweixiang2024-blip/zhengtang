@@ -113,7 +113,6 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
           </Foot>
         </Block>
         <Block
-          align="right"
           title="剩余价值"
           rows={[...servers]
             .filter((s) => s.price_per_cycle != null && s.pay_cycle_months && s.pay_cycle_months > 0 && s.expires_at && s.expires_at > nowSec)
@@ -152,7 +151,6 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
           </Foot>
         </Block>
         <Block
-          align="right"
           title="最忙节点"
           rows={servers
             .filter((s) => s.online && s.metrics)
@@ -226,11 +224,10 @@ function Tile({ children }: { children: React.ReactNode }) {
 /** 单块读数：小标签 / 内容 / 底行小字；rows 非空时悬停弹明细。
  *  明细面板 portal 到 body + fixed 定位：不与下方任何区块（地球/卡片）比层级 */
 function Block({
-  title, rows, align = 'left', children,
+  title, rows, children,
 }: {
   title: string
   rows?: { left: string; right: string; danger?: boolean }[]
-  align?: 'left' | 'right'
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
