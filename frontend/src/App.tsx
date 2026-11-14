@@ -179,8 +179,7 @@ function Main(props: {
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
     return () => mo.disconnect()
   }, [])
-  // 顶栏搜索（按名称过滤列表）+ 地区筛选（地球侧栏，叠加在分组/搜索之上）
-  const [query, setQuery] = useState('')
+  // 地区筛选（地球侧栏，叠加在分组之上）
   const [region, setRegion] = useState<string | null>(null)
   // 分组 id → 名称（真实组名来自 /api/groups；拉取失败回退"分组 N"）
   const [groupNames, setGroupNames] = useState<Map<number, string>>(new Map())
@@ -263,12 +262,10 @@ function Main(props: {
 
   // 仪表盘
   const filtered = group === 'all' ? list : list.filter((s) => s.group_id === group)
-  const q = query.trim().toLowerCase()
-  const searched = q ? filtered.filter((s) => s.name.toLowerCase().includes(q) || (s.region ?? '').toLowerCase().includes(q)) : filtered
-  // 地球输入（分组+搜索后的机器；country 供落针与地区列表）
-  const gnodes = searched.map((s) => ({ id: s.id, name: s.name, online: s.online, country: regionCode(s.region) }))
+  // 地球输入（分组后的机器；country 供落针与地区列表）
+  const gnodes = filtered.map((s) => ({ id: s.id, name: s.name, online: s.online, country: regionCode(s.region) }))
   const gview = regionView(gnodes, region)
-  const finalList = region == null ? searched : searched.filter((_, i) => regionOf(gnodes[i])?.key === region)
+  const finalList = region == null ? filtered : filtered.filter((_, i) => regionOf(gnodes[i])?.key === region)
   const sorted = [...finalList].sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
   const hasCountry = gnodes.some((n) => n.country)
 
@@ -282,7 +279,6 @@ function Main(props: {
       onLogout={onLogout}
       view={view}
       changeView={changeView}
-      search={{ value: query, onChange: setQuery }}
     >
       <div className="space-y-5">
         <StatCards servers={list} />
@@ -352,10 +348,9 @@ function Shell(props: {
   full?: boolean
   view?: ViewMode
   changeView?: (v: ViewMode) => void
-  search?: { value: string; onChange: (v: string) => void }
   children: React.ReactNode
 }) {
-  const { siteName, siteLogo, status, me, navigate, onLogout, bare, full, view, changeView, search, children } = props
+  const { siteName, siteLogo, status, me, navigate, onLogout, bare, full, view, changeView, children } = props
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <TopBar
@@ -367,7 +362,6 @@ function Shell(props: {
         onLogout={onLogout}
         view={view}
         changeView={changeView}
-        search={search}
       />
       <main
         className={

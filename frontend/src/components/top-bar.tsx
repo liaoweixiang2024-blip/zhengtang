@@ -12,7 +12,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CardStyleMenu } from '@/components/card-style-menu'
-import { SearchBox } from '@/components/search-box'
 import { ThemeToggle } from '@/components/theme-toggle'
 import type { ViewMode } from '@/components/dashboard-header'
 import type { Me } from '@/lib/types'
@@ -31,12 +30,11 @@ export function TopBar(props: {
   showLogin?: boolean
   navigate: (h: string, replace?: boolean) => void
   onLogout: () => void
-  /** 传入则显示卡片形态菜单与搜索（列表页） */
+  /** 传入则显示卡片形态切换（列表页） */
   view?: ViewMode
   changeView?: (v: ViewMode) => void
-  search?: { value: string; onChange: (v: string) => void }
 }) {
-  const { siteName, logo, status, me, showLogin = true, navigate, onLogout, view, changeView, search } = props
+  const { siteName, logo, status, me, showLogin = true, navigate, onLogout, view, changeView } = props
   return (
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-[1280px] items-center gap-2 px-4 py-3 sm:gap-3 sm:px-6">
@@ -58,7 +56,6 @@ export function TopBar(props: {
           )}
         </button>
         <div className="flex-1" />
-        {search && <SearchBox value={search.value} onChange={search.onChange} />}
         {/* 图标条带：装不下就横向滑动（jikasei header-tools） */}
         <div className="-my-1.5 flex min-w-0 items-center gap-1.5 overflow-x-auto px-1.5 py-1.5 sm:gap-3">
           {me === undefined ? null : me ? (
