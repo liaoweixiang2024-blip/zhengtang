@@ -234,6 +234,17 @@ html::-webkit-scrollbar {
   .globe-rows { max-height: 232px; }
 }
 
+/* 选中地区展开的机器清单：全宽插在该地区行下方，一行一台，点名字直达详情。
+   与 .globe-reg 同一族样式语言（透明按钮、hover 提亮），但字号小一档、
+   左侧缩进一颗在线点，层级上明显是"地区行"的下级。 */
+.globe-members { grid-column: 1 / -1; display: grid; gap: 1px; margin: 1px 0 6px; padding-left: 12px; }
+.globe-member { display: flex; min-width: 0; align-items: center; gap: 7px; margin: 0; padding: 2px 6px; border: 0; border-radius: 4px; background: none; color: var(--muted-foreground); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.globe-member:hover { color: var(--foreground); background: var(--accent); }
+.globe-member span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 在线点：与状态语义同源（在线绿、离线灰），比卡片那枚小一号 */
+.globe-member i { flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--ok); }
+.globe-member i[data-online="false"] { background: var(--muted-foreground); opacity: 0.45; }
+
 /* 点亮地图：国家 path 需要可点（.globe-atlas svg path 默认 pointer-events:none） */
 .globe-atlas svg path.map-country { pointer-events: auto; }
 .globe-atlas svg path.map-country:hover { fill-opacity: 0.75; }

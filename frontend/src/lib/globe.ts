@@ -791,8 +791,9 @@ function scatter(base: [number, number], rank: number, count: number, seed: numb
   return [wrapLon(base[0] + (Math.cos(angle) * ring) / latScale), Math.max(-78, Math.min(78, base[1] + Math.sin(angle) * ring))]
 }
 
-/** 地区列表的一行。`offline` 是这一地区里离线的台数（行上那枚小点与悬停文案用它）。 */
-export type RegionRow = { region: Region; count: number; aim: [number, number]; offline: number }
+/** 地区列表的一行。`offline` 是这一地区里离线的台数（行上那枚小点与悬停文案用它）；
+ *  `nodes` 是该地区的机器清单（侧栏点开地区后逐条展示，点名字直达详情）。 */
+export type RegionRow = { region: Region; count: number; aim: [number, number]; offline: number; nodes: Node[] }
 export function regionRows(nodes: Node[]): RegionRow[] {
   const map = new Map<string, RegionRow>()
   for (const node of nodes) {
@@ -801,8 +802,9 @@ export function regionRows(nodes: Node[]): RegionRow[] {
     const row = map.get(region.key)
     if (row) {
       row.count += 1
+      row.nodes.push(node)
       if (!node.online) row.offline += 1
-    } else map.set(region.key, { region, count: 1, aim: region.base, offline: node.online ? 0 : 1 })
+    } else map.set(region.key, { region, count: 1, aim: region.base, offline: node.online ? 0 : 1, nodes: [node] })
   }
   return [...map.values()].sort((a, b) => b.count - a.count || (a.region.key < b.region.key ? -1 : a.region.key > b.region.key ? 1 : 0))
 }

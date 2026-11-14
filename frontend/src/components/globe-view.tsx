@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import {
   camera, clampLat, globeCaption, globeNodes, globeProfile, graticule, inkWidthWith, landPaths, layoutLabels,
@@ -350,23 +350,46 @@ export function Globe({ nodes, dark, region, onRegion, onOpen, onWarm }: {
         </button>
         <div className="globe-rows">
           {rows.map((row) => (
-            <button
-              key={row.region.key}
-              type="button"
-              className="globe-reg"
-              aria-pressed={region === row.region.key}
-              onClick={() => pick(row.region.key, row.aim)}
-              title={row.offline > 0 ? `${row.count} 台 · ${row.offline} 台离线` : undefined}
-            >
-              <span>
-                <RegionFlag code={row.region.code} />
-                {row.region.label}
-              </span>
-              <b>
-                {row.count}
-                {row.offline > 0 && <i className="globe-reg-dot" aria-hidden="true" />}
-              </b>
-            </button>
+            <Fragment key={row.region.key}>
+              <button
+                type="button"
+                className="globe-reg"
+                aria-pressed={region === row.region.key}
+                onClick={() => pick(row.region.key, row.aim)}
+                title={
+                  row.offline > 0
+                    ? `${row.count} 台 · ${row.offline} 台离线${region === row.region.key ? "（再点收起清单）" : "（点击展开清单）"}`
+                    : `${row.count} 台（点击展开清单）`
+                }
+              >
+                <span>
+                  <RegionFlag code={row.region.code} />
+                  {row.region.label}
+                </span>
+                <b>
+                  {row.count}
+                  {row.offline > 0 && <i className="globe-reg-dot" aria-hidden="true" />}
+                </b>
+              </button>
+              {/* 选中的地区就地展开机器清单：名字一行一条，点了直达详情（再点地区行收起） */}
+              {region === row.region.key && row.nodes.length > 0 && (
+                <div className="globe-members">
+                  {row.nodes.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className="globe-member"
+                      onClick={() => onOpen(n.id)}
+                      onFocus={onWarm}
+                      title={n.online ? "打开详情" : "已离线 · 打开详情"}
+                    >
+                      <i data-online={String(n.online)} aria-hidden="true" />
+                      <span>{n.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Fragment>
           ))}
         </div>
       </aside>
