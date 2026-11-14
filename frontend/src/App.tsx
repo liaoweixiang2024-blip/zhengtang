@@ -171,7 +171,7 @@ function Main(props: {
   globeEnabled: boolean
 }) {
   const { siteName, siteLogo, path, navigate, me, view, changeView, group, setGroup, onLogout, globeEnabled } = props
-  const { servers, status } = useServers()
+  const { servers, status, ready } = useServers()
   // 暗色（地球扫掠线透明度用）：跟着 <html class=dark> 走
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   useEffect(() => {
@@ -299,15 +299,23 @@ function Main(props: {
         )}
         {groups.length > 0 && <GroupTabs groups={groups} active={group} onChange={setGroup} />}
         {sorted.length === 0 ? (
-          <div className="py-20 text-center text-muted-foreground">
-            {list.length === 0
-              ? // WS 快照未到 ≠ 没有服务器：连上后才下"还没有服务器"的结论，
-                // 否则每次打开都先闪一下空态再跳成卡片列表
-                status === 'open'
-                ? '还没有服务器，到「管理 → 服务器」添加一台'
-                : '正在同步服务器数据…'
-              : '该分组暂无服务器'}
-          </div>
+          list.length === 0 ? (
+            ready ? (
+              // 首帧已到且确为空：才是真"还没有服务器"（HTTP 预取与 WS 快照都到了）
+              <div className="py-20 text-center text-muted-foreground">
+                还没有服务器，到「后台 → 主机」添加一台
+              </div>
+            ) : (
+              // 数据在途：卡片形状的脉冲骨架——刷新时不再闪"还没有服务器"的字样
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-44 animate-pulse rounded-xl border border-border/60 bg-muted/30" />
+                ))}
+              </div>
+            )
+          ) : (
+            <div className="py-20 text-center text-muted-foreground">该分组暂无服务器</div>
+          )
         ) : view === 'compact' ? (
           <ServerTable servers={sorted} onOpen={(id) => navigate(`/server/${id}`)} />
         ) : view === 'mini' ? (

@@ -7,12 +7,31 @@ export type WsStatus = 'connecting' | 'open' | 'closed'
 export function useServers() {
   const [servers, setServers] = useState<Map<string, ServerView>>(new Map())
   const [status, setStatus] = useState<WsStatus>('connecting')
+  // 首帧（HTTP 预取或 WS snapshot，先到者）之前不算"看过了列表"——
+  // 刷新瞬间绝不能把空列表当"还没有服务器"渲染出来（WS open ≠ 快照已到）
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     let ws: WebSocket | null = null
     let retry = 0
     let closed = false
     let timer: ReturnType<typeof setTimeout> | null = null
+
+    // HTTP 预取：挂载即拉一次快照（与 WS 建连并行）。刷新页面时数据几十毫秒就到，
+    // 不用干等 WS 握手；WS 连上后的 snapshot 会全量覆盖（clear+set），幂等。
+    fetch('/api/servers')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (closed || !d?.servers) return
+        setServers((prev) => {
+          if (prev.size > 0) return prev // WS 已先到，不回退
+          const next = new Map(prev)
+          for (const s of d.servers as ServerView[]) next.set(s.id, s)
+          return next
+        })
+        setReady(true)
+      })
+      .catch(() => {})
 
     const connect = () => {
       if (closed) return
@@ -33,6 +52,7 @@ export function useServers() {
               case 'snapshot':
                 next.clear()
                 for (const s of msg.servers) next.set(s.id, s)
+                setReady(true)
                 break
               case 'update':
                 next.set(msg.server.id, msg.server)
@@ -86,5 +106,5 @@ export function useServers() {
     }
   }, [])
 
-  return { servers, status }
+  return { servers, status, ready }
 }
