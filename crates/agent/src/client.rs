@@ -88,7 +88,7 @@ pub async fn run_session(cfg: &Config, collector: &mut Collector) -> Result<()> 
                     }
                     interval_secs = metrics_interval_secs.clamp(1, 60);
                 }
-                ServerMsg::HelloErr => bail!("服务端拒绝握手（检查 agent_id/私钥/注册状态）"),
+                ServerMsg::HelloErr => bail!("服务端拒绝握手（常见原因：面板上删除重加过该服务器未重装；本机时间偏差超过 60 秒——跑 timedatectl set-ntp true 校时后重启 agent）"),
                 other => bail!("期望握手应答，收到 {other:?}"),
             }
         }
