@@ -1175,13 +1175,14 @@ function EditServerDialog({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>编辑服务器</DialogTitle>
-          <DialogDescription>到期、购买、流量配额、账期与费用信息</DialogDescription>
+          <DialogDescription>基本信息、费用与流量账期，按节分组填写</DialogDescription>
         </DialogHeader>
-        <form onSubmit={save} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={save} className="space-y-4">
+          {/* —— 基本信息 —— */}
+          <section className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>名称</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -1224,101 +1225,117 @@ function EditServerDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="min-h-4 text-xs text-destructive">{error}</p>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>线路</Label>
-                <Input value={line} onChange={(e) => setLine(e.target.value)} placeholder="如 CN2 GIA" maxLength={32} />
+                <Input value={line} onChange={(e) => setLine(e.target.value)} placeholder="CN2 GIA" maxLength={32} />
               </div>
               <div className="space-y-1.5">
                 <Label>带宽 (Mbps)</Label>
-                <Input value={bandwidth} onChange={(e) => setBandwidth(e.target.value.replace(/[^0-9]/g, ''))} placeholder="如 500" inputMode="numeric" />
+                <Input value={bandwidth} onChange={(e) => setBandwidth(e.target.value.replace(/[^0-9]/g, ''))} placeholder="500" inputMode="numeric" />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label>到期日</Label>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                  onClick={() => setExpires('')}
-                >
-                  {expires ? '设为长期' : '长期有效 ✓'}
-                </button>
+          </section>
+
+          {/* —— 费用与到期 —— */}
+          <section className="space-y-3 border-t border-border pt-3">
+            <p className="text-xs font-medium text-muted-foreground">费用与到期</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>到期日</Label>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    onClick={() => setExpires('')}
+                  >
+                    {expires ? '设为长期' : '长期有效 ✓'}
+                  </button>
+                </div>
+                <Input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
               </div>
-              <Input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>购买时间</Label>
-              <Input type="date" value={purchased} onChange={(e) => setPurchased(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>流量配额 (GB/月)</Label>
-              <Input inputMode="decimal" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="留空=不限" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>流量重置日</Label>
-              <Select value={resetDay} onValueChange={setResetDay}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="natural">按自然月（1 号）</SelectItem>
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                    <SelectItem key={d} value={String(d)}>每月 {d} 日</SelectItem>
-                  ))}
-                  <SelectItem value="29">每月 29 日（2 月按月末）</SelectItem>
-                  <SelectItem value="30">每月 30 日（2 月按月末）</SelectItem>
-                  <SelectItem value="31">每月 31 日（小月按月末）</SelectItem>
-                  <SelectItem value="99">每月月末（自动跟随当月最后一天）</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>付费周期</Label>
-              <Select value={payCycle} onValueChange={setPayCycle}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">未填写</SelectItem>
-                  {Object.entries(CYCLE_LABEL).map(([m, label]) => (
-                    <SelectItem key={m} value={m}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>每期费用</Label>
-              <div className="flex gap-2">
-                <Input
-                  inputMode="decimal"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder={payCycle === '-1' ? '免费' : '留空=不计'}
-                  disabled={payCycle === 'none' || payCycle === '-1'}
-                />
-                <Select value={currency} onValueChange={setCurrency} disabled={payCycle === 'none' || payCycle === '-1'}>
-                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+              <div className="space-y-1.5">
+                <Label>购买时间</Label>
+                <Input type="date" value={purchased} onChange={(e) => setPurchased(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>付费周期</Label>
+                <Select value={payCycle} onValueChange={setPayCycle}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.keys(CURRENCY_SYMBOL).map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    <SelectItem value="none">未填写</SelectItem>
+                    {Object.entries(CYCLE_LABEL).map(([m, label]) => (
+                      <SelectItem key={m} value={m}>{label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1.5">
+                <Label>每期费用</Label>
+                <div className="flex gap-2">
+                  <Input
+                    inputMode="decimal"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder={payCycle === '-1' ? '免费' : '留空=不计'}
+                    disabled={payCycle === 'none' || payCycle === '-1'}
+                  />
+                  <Select value={currency} onValueChange={setCurrency} disabled={payCycle === 'none' || payCycle === '-1'}>
+                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.keys(CURRENCY_SYMBOL).map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
-          </div>
+          </section>
+
+          {/* —— 流量 —— */}
+          <section className="space-y-3 border-t border-border pt-3">
+            <p className="text-xs font-medium text-muted-foreground">流量</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>流量配额 (GB/月)</Label>
+                <Input inputMode="decimal" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="留空=不限" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>流量重置日</Label>
+                <Select value={resetDay} onValueChange={setResetDay}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="natural">按自然月（1 号）</SelectItem>
+                    {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                      <SelectItem key={d} value={String(d)}>每月 {d} 日</SelectItem>
+                    ))}
+                    <SelectItem value="29">每月 29 日（2 月按月末）</SelectItem>
+                    <SelectItem value="30">每月 30 日（2 月按月末）</SelectItem>
+                    <SelectItem value="31">每月 31 日（小月按月末）</SelectItem>
+                    <SelectItem value="99">每月月末（自动跟随当月最后一天）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {purchased && resetDay === 'natural' && (
+              <p className="text-xs text-muted-foreground">
+                提示：已填购买时间，可把重置日设为购买日对应的日子，流量将按购买日对齐的账期统计
+              </p>
+            )}
+          </section>
+
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <span className="text-sm">公开展示（/public 匿名可见）</span>
             <Switch checked={publicVisible} onCheckedChange={setPublicVisible} />
           </div>
-          {purchased && resetDay === 'natural' && (
-            <p className="text-xs text-muted-foreground">
-              提示：已填购买时间，可把重置日设为购买日对应的日子，流量将按购买日对齐的账期统计
-            </p>
-          )}
-          <p className="min-h-5 text-sm text-destructive">{error}</p>
-          <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? '保存中…' : '保存'}
-          </Button>
+          <div className="flex items-center gap-3">
+            <p className="min-h-5 flex-1 text-sm text-destructive">{error}</p>
+            <Button type="submit" disabled={busy}>
+              {busy ? '保存中…' : '保存'}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
