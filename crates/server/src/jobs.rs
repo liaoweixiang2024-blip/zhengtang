@@ -136,11 +136,18 @@ fn month_string(ts: i64) -> String {
 
 /// 账期 key：流量统计归入哪个周期。
 /// - reset_day=None：自然月，key='YYYY-MM'
-/// - reset_day=d(1-28)：按月对齐到 d 号的账期，key='YYYY-MM-DD'（当期起始日）
+/// - reset_day=d(1-31)：按月对齐到 d 号的账期，key='YYYY-MM-DD'（当期起始日）；
+///   d 超过当月天数时取当月最后一天（信用卡式惯例：31 号重置 → 2 月按 2/28、4 月按 4/30）
+/// - reset_day=99：每月月末哨兵（自动跟随当月最后一天）
 ///   例：d=15，3-20 → 期起点 3-15（key 2026-03-15）；3-10 → 期起点 2-15（key 2026-02-15）
 pub fn billing_period(ts: i64, reset_day: Option<i64>) -> String {
     let Some(d) = reset_day else { return month_string(ts) };
-    let d = d.clamp(1, 28) as u32;
+    // 99 用 u32::MAX 表示，min(当月天数) 自然落到月末
+    let d = match d {
+        99 => u32::MAX,
+        d if (1..=31).contains(&d) => d as u32,
+        _ => 1,
+    };
 
     // days → (y, m, day) 民用日期
     let mut days = ts / 86400;
@@ -167,12 +174,15 @@ pub fn billing_period(ts: i64, reset_day: Option<i64>) -> String {
         m += 1;
     }
 
-    if day >= d {
-        format!("{y:04}-{m:02}-{d:02}")
+    let cur_start = d.min(mdays[(m - 1) as usize]);
+    if day >= cur_start {
+        format!("{y:04}-{m:02}-{cur_start:02}")
     } else {
-        // 归属上月账期：起点 = 上月 d 号
+        // 归属上月账期：起点 = 上月 min(d, 上月天数)
         let (py, pm) = if m == 1 { (y - 1, 12) } else { (y, (m - 1) as i64) };
-        format!("{py:04}-{pm:02}-{d:02}")
+        let pm_days = mdays[(if m == 1 { 12 } else { m - 1 }) as usize - 1];
+        let p_start = d.min(pm_days);
+        format!("{py:04}-{pm:02}-{p_start:02}")
     }
 }
 
@@ -223,6 +233,21 @@ mod tests {
         // 跨年：2027-01-05 reset=15 → 2026-12-15 期
         let ts_0105 = day_ts(2027, 1, 5);
         assert_eq!(billing_period(ts_0105, Some(15)), "2026-12-15");
+    }
+
+    #[test]
+    fn billing_period_month_end_semantics() {
+        // 31 号重置：大月照常，小月/2 月收缩到当月最后一天
+        assert_eq!(billing_period(day_ts(2026, 11, 20), Some(31)), "2026-10-31"); // 11 月收缩日是 11-30，20 号归上期（10-31）
+        assert_eq!(billing_period(day_ts(2026, 12, 5), Some(31)), "2026-11-30"); // 12 月初 → 上期 11 月收缩到 30
+        assert_eq!(billing_period(day_ts(2026, 3, 5), Some(31)), "2026-02-28"); // 3 月初 → 上期 2 月末
+        assert_eq!(billing_period(day_ts(2026, 4, 30), Some(31)), "2026-04-30"); // 4 月 30 = 当月收缩日当天
+        assert_eq!(billing_period(day_ts(2028, 3, 1), Some(29)), "2028-02-29"); // 闰年 2 月 29 存在
+        assert_eq!(billing_period(day_ts(2026, 3, 1), Some(29)), "2026-02-28"); // 平年收缩到 2-28
+        // 99 = 月末哨兵：每月自动跟最后一天
+        assert_eq!(billing_period(day_ts(2026, 2, 10), Some(99)), "2026-01-31");
+        assert_eq!(billing_period(day_ts(2026, 4, 15), Some(99)), "2026-03-31");
+        assert_eq!(billing_period(day_ts(2026, 12, 31), Some(99)), "2026-12-31");
     }
 
     fn day_ts(y: i64, m: u32, d: u32) -> i64 {

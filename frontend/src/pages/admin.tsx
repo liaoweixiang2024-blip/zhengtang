@@ -175,7 +175,7 @@ function ServersTab({ navigate }: { navigate?: (h: string) => void }) {
                 </TableCell>
                 <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">{fmtCost(s)}</TableCell>
                 <TableCell className="hidden text-xs text-muted-foreground xl:table-cell">
-                  {s.purchased_at ? dateStr(s.purchased_at) : '—'} · {s.traffic_reset_day ? `每月${s.traffic_reset_day}日` : '自然月'}
+                  {s.purchased_at ? dateStr(s.purchased_at) : '—'} · {s.traffic_reset_day === 99 ? '每月月末' : s.traffic_reset_day ? `每月${s.traffic_reset_day}日` : '自然月'}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="编辑" onClick={() => setEditServer(s)}>
@@ -1160,6 +1160,10 @@ function EditServerDialog({
                   {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
                     <SelectItem key={d} value={String(d)}>每月 {d} 日</SelectItem>
                   ))}
+                  <SelectItem value="29">每月 29 日（2 月按月末）</SelectItem>
+                  <SelectItem value="30">每月 30 日（2 月按月末）</SelectItem>
+                  <SelectItem value="31">每月 31 日（小月按月末）</SelectItem>
+                  <SelectItem value="99">每月月末（自动跟随当月最后一天）</SelectItem>
                 </SelectContent>
               </Select>
             </div>

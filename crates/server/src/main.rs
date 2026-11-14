@@ -13,6 +13,7 @@ mod state;
 mod store;
 mod tls;
 mod update;
+mod ppv2;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -145,59 +146,81 @@ async fn serve(data_dir: &PathBuf, listen: &str, http: bool, metrics_interval: u
 
     let addr: SocketAddr = listen.parse().with_context(|| format!("无效监听地址: {listen}"))?;
 
-    if http {
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        tracing::warn!(%addr, "以明文 HTTP 模式运行（请确保在可信反代之后）");
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await?;
-        return Ok(());
-    }
-
-    let cert = tls::ensure_cert(data_dir)?;
-    let tls_config = tls::build_tls_config(&cert)?;
-    println!("zhengtang 服务端已启动: https://{addr}");
-    println!("Agent 接入端点     : wss://{addr}/ws/agent");
-    println!("TLS 证书指纹(SHA-256): {}", cert.fingerprint_hex);
-    println!("（首启向导请在浏览器打开面板完成管理员创建）");
-
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    let acceptor = tokio_rustls::TlsAcceptor::from(tls_config);
+    let acceptor = if http {
+        tracing::warn!(%addr, "以明文 HTTP 模式运行（请确保在可信反代之后）");
+        None
+    } else {
+        let cert = tls::ensure_cert(data_dir)?;
+        let tls_config = tls::build_tls_config(&cert)?;
+        println!("zhengtang 服务端已启动: https://{addr}");
+        println!("Agent 接入端点     : wss://{addr}/ws/agent");
+        println!("TLS 证书指纹(SHA-256): {}", cert.fingerprint_hex);
+        println!("（首启向导请在浏览器打开面板完成管理员创建）");
+        Some(tokio_rustls::TlsAcceptor::from(tls_config))
+    };
+
+    // 手动 accept：TLS 与明文共用一条路径，且 accept 后先 peek PPv2 头——
+    // frp 纯 TCP 穿透把源 IP 丢成 127.0.0.1，frpc 开 transport.proxyProtocolVersion=v2
+    // 后转发流头部带真实来源地址；取出来替换 peer，last_ip/地区识别/审计 IP 全链路受益。
+    // 普通直连 peek 一字节即放行，零开销
     loop {
-        let (tcp, peer) = listener.accept().await?;
+        let (mut tcp, peer) = listener.accept().await?;
         let acceptor = acceptor.clone();
         let app = app.clone();
         tokio::spawn(async move {
-            let tls = match acceptor.accept(tcp).await {
-                Ok(t) => t,
+            let peer = match ppv2::maybe_proxied(&mut tcp).await {
+                Ok(Some(real)) => real,
+                Ok(None) => peer,
                 Err(e) => {
-                    tracing::debug!(%peer, error = %e, "TLS 握手失败");
+                    tracing::debug!(%peer, error = %e, "连接异常（PPv2 探测阶段断开）");
                     return;
                 }
             };
-            let io = hyper_util::rt::TokioIo::new(tls);
-            let service = hyper::service::service_fn(
-                move |request: hyper::Request<hyper::body::Incoming>| {
-                    let mut app = app.clone();
-                    async move {
-                        use tower::Service;
-                        // 手动注入 ConnectInfo（等价 into_make_service_with_connect_info）
-                        let mut request = request.map(axum::body::Body::new);
-                        request.extensions_mut().insert(axum::extract::ConnectInfo(peer));
-                        app.call(request).await
+            // TLS 流与裸 TCP 各自走泛型 serve_conn（多 trait 合不成一个 dyn 对象）
+            match acceptor {
+                Some(acceptor) => {
+                    if let Ok(t) = acceptor.accept(tcp).await {
+                        serve_conn(hyper_util::rt::TokioIo::new(t), &app, peer).await;
+                    } else {
+                        tracing::debug!(%peer, "TLS 握手失败");
                     }
-                },
-            );
-            if let Err(e) = hyper::server::conn::http1::Builder::new()
-                .serve_connection(io, service)
-                .with_upgrades()
-                .await
-            {
-                tracing::debug!(%peer, error = %e, "HTTP 连接错误");
-            }
+                }
+                None => {
+                    serve_conn(hyper_util::rt::TokioIo::new(tcp), &app, peer).await;
+                }
+            };
         });
+    }
+}
+
+/// 单条连接：注入 ConnectInfo（含 PPv2 还原的真实源 IP）后交给 hyper
+async fn serve_conn<I>(
+    io: hyper_util::rt::TokioIo<I>,
+    app: &axum::Router,
+    peer: SocketAddr,
+) where
+    I: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    let app = app.clone();
+    let service = hyper::service::service_fn(
+        move |request: hyper::Request<hyper::body::Incoming>| {
+            let mut app = app.clone();
+            async move {
+                use tower::Service;
+                // 手动注入 ConnectInfo（等价 into_make_service_with_connect_info）
+                let mut request = request.map(axum::body::Body::new);
+                request.extensions_mut().insert(axum::extract::ConnectInfo(peer));
+                app.call(request).await
+            }
+        },
+    );
+    if let Err(e) = hyper::server::conn::http1::Builder::new()
+        .serve_connection(io, service)
+        .with_upgrades()
+        .await
+    {
+        tracing::debug!(%peer, error = %e, "HTTP 连接错误");
     }
 }
 // build trigger 1794464668

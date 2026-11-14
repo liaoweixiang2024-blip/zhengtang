@@ -803,10 +803,10 @@ async fn update_server(
             c.execute("UPDATE servers SET purchased_at = ?1 WHERE id = ?2", rusqlite::params![v, id])?;
         }
         if let Some(rd) = body.traffic_reset_day {
-            // 合法值：1-28 或 NULL（自然月）
+            // 合法值：1-31（29/30/31 在不足的月份按当月最后一天）、99=每月月末、NULL=自然月
             if let Some(d) = rd {
-                if !(1..=28).contains(&d) {
-                    anyhow::bail!("流量重置日必须是 1-28");
+                if !(1..=31).contains(&d) && d != 99 {
+                    anyhow::bail!("流量重置日必须是 1-31、99（月末）或留空");
                 }
             }
             c.execute("UPDATE servers SET traffic_reset_day = ?1 WHERE id = ?2", rusqlite::params![rd, id])?;
