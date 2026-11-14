@@ -1,19 +1,10 @@
-import { cn } from '@/lib/utils'
-
 /**
- * 交易所式数字：数值从不插值（不会出现 11.87 这种中间数），
- * 变化瞬间新值以一次短促的滑入动画顶替旧值——同行情软件的报价切换。
- *
- * 实现：span 以格式化结果为 key，值一变元素即重挂载，CSS 进入动画随之播放。
- * 300ms / 从下 6px 滑入 + 淡入，安静且有"换了一手"的方向感。
+ * 数值显示的统一出口（2026-11-15 四轮调优的最终口径）：
+ * **零动画直切**——值一变立即替换文字，无滚动、无定格、无淡入滑入。
+ * 此前试过 600/1600ms 缓动滚动（嫌翻动忙）、延迟定格（嫌怪）、滑入动画（嫌闪）；
+ * 结论：任何中间过程都是噪声，安静 = 不加戏。
+ * 保留这个组件壳是为了以后再调显示策略时不用动各调用点。
  */
-export function SmoothValue({ value, className }: { value: string; className?: string }) {
-  return (
-    <span
-      key={value}
-      className={cn('inline-block animate-in fade-in-0 slide-in-from-bottom-1.5 duration-300', className)}
-    >
-      {value}
-    </span>
-  )
+export function SmoothValue({ value }: { value: string }) {
+  return <>{value}</>
 }
