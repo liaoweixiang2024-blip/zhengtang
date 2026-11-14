@@ -50,6 +50,10 @@ pub struct ServerView {
     pub currency: Option<String>,
     /// 地区徽章（如 '🇭🇰 香港'）
     pub region: Option<String>,
+    /// 线路标注（如 CN2 GIA）
+    pub line: Option<String>,
+    /// 带宽（Mbps）
+    pub bandwidth_mbps: Option<i64>,
     pub public_visible: bool,
     pub system_info: Option<SystemInfo>,
     pub metrics: Option<RealtimeMetrics>,
@@ -101,6 +105,10 @@ pub struct ServerReg {
     pub price_per_cycle: Option<f64>,
     pub currency: Option<String>,
     pub region: Option<String>,
+    /// 线路标注（如 CN2 GIA）
+    pub line: Option<String>,
+    /// 带宽（Mbps）
+    pub bandwidth_mbps: Option<i64>,
 }
 
 pub struct AppState {
@@ -206,7 +214,7 @@ impl AppState {
             .with(|c| {
                 let rows = {
                     let mut stmt = c.prepare(
-                        "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency, region FROM servers ORDER BY sort_order, created_at",
+                        "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency, region, line, bandwidth_mbps FROM servers ORDER BY sort_order, created_at",
                     )?;
                     let collected: Vec<_> = stmt
                         .query_map([], |r| {
@@ -223,6 +231,8 @@ impl AppState {
                                 price_per_cycle: r.get(10)?,
                                 currency: r.get(11)?,
                                 region: r.get(12)?,
+                                line: r.get(13)?,
+                                bandwidth_mbps: r.get(14)?,
                             }, r.get::<_, i64>(6)?))
                         })?
                         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -261,6 +271,8 @@ impl AppState {
                     price_per_cycle: reg.price_per_cycle,
                     currency: reg.currency,
                     region: reg.region,
+            line: reg.line,
+            bandwidth_mbps: reg.bandwidth_mbps,
                     public_visible: reg.public_visible,
                     system_info: self.system_info.get(&reg.id).map(|s| s.clone()),
                     metrics: self.metrics.get(&reg.id).map(|m| m.clone()),

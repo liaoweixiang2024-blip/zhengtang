@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { guessRegion } from '@/lib/guess-region'
 import { CYCLE_LABEL, CURRENCY_SYMBOL, fmtCost, monthlyCostByCurrency } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { Bell, Info, ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2, KeyRound } from 'lucide-react'
@@ -1115,10 +1116,13 @@ function EditServerDialog({
   const [purchased, setPurchased] = useState(server.purchased_at ? dateStr(server.purchased_at) : '')
   const [quota, setQuota] = useState(server.traffic_quota_bytes ? String(server.traffic_quota_bytes / GB) : '')
   const [resetDay, setResetDay] = useState(server.traffic_reset_day ? String(server.traffic_reset_day) : 'natural')
+  const [line, setLine] = useState(server.line ?? '')
+  const [bandwidth, setBandwidth] = useState(server.bandwidth_mbps ? String(server.bandwidth_mbps) : '')
   const [payCycle, setPayCycle] = useState(server.pay_cycle_months != null ? String(server.pay_cycle_months) : 'none')
   const [price, setPrice] = useState(server.price_per_cycle != null ? String(server.price_per_cycle) : '')
   const [currency, setCurrency] = useState(server.currency ?? 'CNY')
-  const [region, setRegion] = useState(server.region ?? 'none')
+  // 地区为空时按机器名猜一个默认值（jikasei 同款城市线索），保存才落库
+  const [region, setRegion] = useState(server.region ?? guessRegion(server.name) ?? 'none')
   const [publicVisible, setPublicVisible] = useState(server.public_visible)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1151,6 +1155,8 @@ function EditServerDialog({
       price_per_cycle: payCycle === 'none' || payCycle === '-1' ? null : priceVal,
       currency: payCycle === 'none' || payCycle === '-1' ? null : currency,
       region: region === 'none' ? null : region,
+      line: line.trim() || null,
+      bandwidth_mbps: bandwidth ? Number(bandwidth) : null,
       public_visible: publicVisible,
     }
     const res = await fetch(`/api/admin/servers/${server.id}`, {
@@ -1219,6 +1225,16 @@ function EditServerDialog({
                 </SelectContent>
               </Select>
               <p className="min-h-4 text-xs text-destructive">{error}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label>线路</Label>
+                <Input value={line} onChange={(e) => setLine(e.target.value)} placeholder="如 CN2 GIA" maxLength={32} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>带宽 (Mbps)</Label>
+                <Input value={bandwidth} onChange={(e) => setBandwidth(e.target.value.replace(/[^0-9]/g, ''))} placeholder="如 500" inputMode="numeric" />
+              </div>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">

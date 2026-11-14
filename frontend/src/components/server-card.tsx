@@ -151,6 +151,12 @@ export function ServerCard({ server }: { server: ServerView }) {
           <OnlineDot online={online} />
           {upText}
         </span>
+        {server.line && (
+          <span className="hidden shrink-0 sm:inline" title={server.line}>
+            {server.line}
+            {server.bandwidth_mbps ? <span className="tnum text-muted-foreground/70"> · {server.bandwidth_mbps}M</span> : null}
+          </span>
+        )}
         {cost && <span className="tnum shrink-0">{cost}</span>}
       </div>
 

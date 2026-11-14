@@ -787,6 +787,10 @@ struct UpdateServerBody {
     /// 1-28；None=自然月
     #[serde(default, deserialize_with = "double_option")]
     traffic_reset_day: Option<Option<i64>>,
+    /// 线路（如 CN2 GIA；null=清除）
+    line: Option<Option<String>>,
+    /// 带宽 Mbps（null=清除）
+    bandwidth_mbps: Option<Option<i64>>,
     /// 付费周期月数：1/3/12/36/60；0=一次性；-1=免费
     #[serde(default, deserialize_with = "double_option")]
     pay_cycle_months: Option<Option<i64>>,
@@ -837,6 +841,23 @@ async fn update_server(
         if let Some(p) = body.purchased_at {
             let v: Option<i64> = p;
             c.execute("UPDATE servers SET purchased_at = ?1 WHERE id = ?2", rusqlite::params![v, id])?;
+        }
+        if let Some(v) = body.line.clone() {
+            let v = v.filter(|s| !s.trim().is_empty()).map(|s| s.trim().to_string());
+            if let Some(v) = &v {
+                if v.chars().count() > 32 {
+                    anyhow::bail!("线路标注 ≤32 字符");
+                }
+            }
+            c.execute("UPDATE servers SET line = ?1 WHERE id = ?2", rusqlite::params![v, id])?;
+        }
+        if let Some(v) = body.bandwidth_mbps {
+            if let Some(bw) = v {
+                if !(1..=1_000_000).contains(&bw) {
+                    anyhow::bail!("带宽需在 1-1000000 Mbps 之间");
+                }
+            }
+            c.execute("UPDATE servers SET bandwidth_mbps = ?1 WHERE id = ?2", rusqlite::params![v, id])?;
         }
         if let Some(rd) = body.traffic_reset_day {
             // 合法值：1-31（29/30/31 在不足的月份按当月最后一天）、99=每月月末、NULL=自然月

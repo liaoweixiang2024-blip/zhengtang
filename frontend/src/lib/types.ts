@@ -71,6 +71,10 @@ export interface ServerView {
   price_per_cycle: number | null
   currency: string | null
   region: string | null
+  /** 线路标注（如 CN2 GIA） */
+  line: string | null
+  /** 带宽（Mbps） */
+  bandwidth_mbps: number | null
   public_visible: boolean
   system_info: SystemInfo | null
   metrics: RealtimeMetrics | null
