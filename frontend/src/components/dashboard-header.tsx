@@ -236,19 +236,34 @@ function Block({
   const panelRef = useRef<HTMLDivElement>(null)
   const hasRows = !!rows?.length
 
-  // 面板是 fixed 定位，页面一滚它就和触发块错位（悬空）——滚动或改窗口时直接收起；
+  // 页面滚动时面板**跟着块走**（rAF 重定位贴住块底）而不是关闭——滚动查看页面
+  // 不会再把面板收掉；只有块滚出视口（上下都看不见了）才收起。
   // 明细列表自身的内部滚动不算（panelRef 内的 scroll 事件跳过）
   useEffect(() => {
     if (!open) return
-    const close = (e: Event) => {
-      if (e.target instanceof Node && panelRef.current?.contains(e.target)) return
-      setOpen(false)
+    let raf = 0
+    const reposition = () => {
+      raf = 0
+      const el = ref.current
+      const r = el?.getBoundingClientRect()
+      const card = el?.closest('[data-slot=\"card\"]')?.getBoundingClientRect()
+      if (!r || !card) return
+      if (r.bottom < 0 || r.top > window.innerHeight) {
+        setOpen(false)
+        return
+      }
+      setSpot({ top: r.bottom, left: Math.max(8, Math.min(card.left, window.innerWidth - card.width - 8)), width: Math.ceil(card.width) })
     }
-    addEventListener('scroll', close, true)
-    addEventListener('resize', close)
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && panelRef.current?.contains(e.target)) return
+      if (!raf) raf = requestAnimationFrame(reposition)
+    }
+    addEventListener('scroll', onScroll, true)
+    addEventListener('resize', onScroll)
     return () => {
-      removeEventListener('scroll', close, true)
-      removeEventListener('resize', close)
+      removeEventListener('scroll', onScroll, true)
+      removeEventListener('resize', onScroll)
+      if (raf) cancelAnimationFrame(raf)
     }
   }, [open])
   const enter = () => {
