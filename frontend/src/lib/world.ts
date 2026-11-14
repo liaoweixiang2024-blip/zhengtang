@@ -164,37 +164,39 @@ export const COUNTRY_LL: Record<string, [number, number]> = {
  * 现在每一行都是「能认到的最准的地名」：城市优先，认不出城市就写国家名。
  *
  * 与 `COUNTRY_LL` 同一张清单（凡能上地球的国家都有名字，单测盯着这条全覆盖）；
- * 写法取英文常用短名，与城市名（CITY_HINTS 的第三项）同一套语言。
+ * 中文口径（2026-11-14 起）：与后台地区下拉、识别写入的「🇭🇰 香港」同一套语言，
+ * 地球侧栏不再中英混排。城市名（CITY_HINTS 命中时）仍为英文——命中线索的机器少，
+ * 全量汉化城市表成本高，暂留。
  */
 export const COUNTRY_NAME: Record<string, string> = {
-  HK: "Hong Kong", JP: "Japan", DE: "Germany", NL: "Netherlands",
-  US: "United States", TW: "Taiwan", AU: "Australia", SG: "Singapore",
-  KR: "Korea", GB: "United Kingdom", FR: "France", CN: "China",
+  HK: "香港", JP: "日本", DE: "德国", NL: "荷兰",
+  US: "美国", TW: "台湾", AU: "澳大利亚", SG: "新加坡",
+  KR: "韩国", GB: "英国", FR: "法国", CN: "中国",
   // —— 欧洲
-  IE: "Ireland", SE: "Sweden", CH: "Switzerland", FI: "Finland",
-  NO: "Norway", DK: "Denmark", BE: "Belgium", AT: "Austria",
-  CZ: "Czech Republic", PL: "Poland", UA: "Ukraine", RO: "Romania",
-  BG: "Bulgaria", HU: "Hungary", SK: "Slovakia", SI: "Slovenia",
-  HR: "Croatia", RS: "Serbia", GR: "Greece", PT: "Portugal",
-  IT: "Italy", ES: "Spain", EE: "Estonia", LV: "Latvia",
-  LT: "Lithuania", IS: "Iceland", LU: "Luxembourg", MD: "Moldova",
-  CY: "Cyprus", MT: "Malta", BY: "Belarus", RU: "Russia",
-  TR: "Turkey",
+  IE: "爱尔兰", SE: "瑞典", CH: "瑞士", FI: "芬兰",
+  NO: "挪威", DK: "丹麦", BE: "比利时", AT: "奥地利",
+  CZ: "捷克", PL: "波兰", UA: "乌克兰", RO: "罗马尼亚",
+  BG: "保加利亚", HU: "匈牙利", SK: "斯洛伐克", SI: "斯洛文尼亚",
+  HR: "克罗地亚", RS: "塞尔维亚", GR: "希腊", PT: "葡萄牙",
+  IT: "意大利", ES: "西班牙", EE: "爱沙尼亚", LV: "拉脱维亚",
+  LT: "立陶宛", IS: "冰岛", LU: "卢森堡", MD: "摩尔多瓦",
+  CY: "塞浦路斯", MT: "马耳他", BY: "白俄罗斯", RU: "俄罗斯",
+  TR: "土耳其",
   // —— 北美与拉美
-  CA: "Canada", MX: "Mexico", BR: "Brazil", AR: "Argentina",
-  CL: "Chile", CO: "Colombia", PE: "Peru", EC: "Ecuador",
-  PA: "Panama", PR: "Puerto Rico",
+  CA: "加拿大", MX: "墨西哥", BR: "巴西", AR: "阿根廷",
+  CL: "智利", CO: "哥伦比亚", PE: "秘鲁", EC: "厄瓜多尔",
+  PA: "巴拿马", PR: "波多黎各",
   // —— 亚洲（中东并入）
-  IN: "India", PK: "Pakistan", BD: "Bangladesh", LK: "Sri Lanka",
-  NP: "Nepal", MY: "Malaysia", TH: "Thailand", VN: "Vietnam",
-  ID: "Indonesia", PH: "Philippines", KH: "Cambodia", MO: "Macau",
-  AE: "United Arab Emirates", SA: "Saudi Arabia", QA: "Qatar", KW: "Kuwait",
-  BH: "Bahrain", OM: "Oman", IL: "Israel", JO: "Jordan",
-  GE: "Georgia", AM: "Armenia", AZ: "Azerbaijan", KZ: "Kazakhstan",
-  UZ: "Uzbekistan", MN: "Mongolia", KP: "North Korea",
+  IN: "印度", PK: "巴基斯坦", BD: "孟加拉国", LK: "斯里兰卡",
+  NP: "尼泊尔", MY: "马来西亚", TH: "泰国", VN: "越南",
+  ID: "印度尼西亚", PH: "菲律宾", KH: "柬埔寨", MO: "澳门",
+  AE: "阿联酋", SA: "沙特阿拉伯", QA: "卡塔尔", KW: "科威特",
+  BH: "巴林", OM: "阿曼", IL: "以色列", JO: "约旦",
+  GE: "格鲁吉亚", AM: "亚美尼亚", AZ: "阿塞拜疆", KZ: "哈萨克斯坦",
+  UZ: "乌兹别克斯坦", MN: "蒙古", KP: "朝鲜",
   // —— 非洲与大洋洲
-  ZA: "South Africa", EG: "Egypt", MA: "Morocco", NG: "Nigeria",
-  KE: "Kenya", NZ: "New Zealand",
+  ZA: "南非", EG: "埃及", MA: "摩洛哥", NG: "尼日利亚",
+  KE: "肯尼亚", NZ: "新西兰",
 }
 
 /**
@@ -337,7 +339,7 @@ export const CITY_HINTS: { match: RegExp; ll: [number, number]; name: string }[]
  * 显示，只是不再裸写国家码。MO 补进来（澳门与香港同类：一座城市就是一个地区）。
  */
 export const COUNTRY_CITY_FALLBACK: Record<string, string> = {
-  HK: "Hong Kong",
-  SG: "Singapore",
-  MO: "Macau",
+  HK: "香港",
+  SG: "新加坡",
+  MO: "澳门",
 }

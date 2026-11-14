@@ -211,20 +211,25 @@ function Block({
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const [spot, setSpot] = useState<{ top: number; left?: number; right?: number } | null>(null)
+  const [spot, setSpot] = useState<{ top: number; left?: number; right?: number; width: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const hasRows = !!rows?.length
   const enter = () => {
     if (!hasRows) return
     const r = ref.current?.getBoundingClientRect()
     if (r) {
+      // 面板宽度跟随触发块（下限 232 保证明细放得下，上限 340），与块边缘严格对齐——
+      // 视觉上是"从这块拉出来的抽屉"，而不是飘在页面某处的一个框
+      const width = Math.min(340, Math.max(232, Math.ceil(r.width)))
+      const top = r.bottom
       // top 贴住块底（零间隙）：容器把视觉间距吃进自身 padding，
       // 鼠标从块移进面板全程都在悬停区内，不会中途触发关闭
-      setSpot(
-        align === 'right'
-          ? { top: r.bottom, right: window.innerWidth - r.right }
-          : { top: r.bottom, left: r.left },
-      )
+      if (align === 'right') {
+        setSpot({ top, right: Math.max(8, window.innerWidth - r.right), width })
+      } else {
+        // 左对齐块左缘；贴近视口右缘时向左让，别溢出屏幕
+        setSpot({ top, left: Math.min(r.left, window.innerWidth - width - 8), width })
+      }
     }
     setOpen(true)
   }
@@ -242,19 +247,27 @@ function Block({
         spot &&
         createPortal(
           <div
-            style={{ position: 'fixed', top: spot.top, ...(spot.left != null ? { left: spot.left } : { right: spot.right }) }}
-            className="z-[70] w-64 max-w-[80vw] pt-1.5"
+            style={{ position: 'fixed', top: spot.top, width: spot.width, ...(spot.left != null ? { left: spot.left } : { right: spot.right }) }}
+            className="z-[70] pt-1.5"
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
           >
-            <div className="max-h-60 overflow-y-auto rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg">
-              <div className="px-2 pb-1 pt-0.5 text-xs font-medium text-muted-foreground">{title} · 明细</div>
-              {rows!.map((r, i) => (
-                <div key={i} className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs">
-                  <span className="min-w-0 truncate">{r.left}</span>
-                  <span className={cn('shrink-0 tabular-nums', r.danger ? 'text-red-500' : 'text-muted-foreground')}>{r.right}</span>
-                </div>
-              ))}
+            <div className="max-h-64 animate-in fade-in-0 slide-in-from-top-1 overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/5 duration-150">
+              <div className="flex items-baseline justify-between gap-2 px-2 pb-1 pt-1">
+                <span className="text-xs font-medium">{title}</span>
+                <span className="text-[10px] text-muted-foreground">每机明细 · {rows!.length}</span>
+              </div>
+              <div className="grid gap-0.5">
+                {rows!.map((r, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                  >
+                    <span className="min-w-0 truncate">{r.left}</span>
+                    <span className={cn('shrink-0 tabular-nums', r.danger ? 'font-medium text-red-500' : 'text-muted-foreground')}>{r.right}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>,
           document.body,
