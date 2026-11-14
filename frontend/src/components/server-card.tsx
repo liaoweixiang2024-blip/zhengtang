@@ -189,12 +189,12 @@ export function ServerCard({ server }: { server: ServerView }) {
           {/* 三枚读数盒：速率 / 总量 / 到期（jikasei [data-stats]，窄卡自动让位） */}
           <div data-stats="" className="mt-4 grid gap-2">
             <InfoBox data-stat="speed">
-              <Stat icon={ArrowDown}><Smooth value={m ? m.net_in_speed : null} fmt={fmtSpeed} min="min-w-[8ch]" /></Stat>
-              <Stat icon={ArrowUp}><Smooth value={m ? m.net_out_speed : null} fmt={fmtSpeed} min="min-w-[8ch]" /></Stat>
+              <Stat icon={ArrowDown}><Smooth value={m ? m.net_in_speed : null} fmt={fmtSpeed} min="min-w-[10ch]" /></Stat>
+              <Stat icon={ArrowUp}><Smooth value={m ? m.net_out_speed : null} fmt={fmtSpeed} min="min-w-[10ch]" /></Stat>
             </InfoBox>
             <InfoBox data-stat="total">
-              <Stat icon={ArrowDown}><Smooth value={m ? m.net_in_total : null} fmt={fmtBytes} min="min-w-[7ch]" /></Stat>
-              <Stat icon={ArrowUp}><Smooth value={m ? m.net_out_total : null} fmt={fmtBytes} min="min-w-[7ch]" /></Stat>
+              <Stat icon={ArrowDown}><Smooth value={m ? m.net_in_total : null} fmt={fmtBytes} min="min-w-[8ch]" /></Stat>
+              <Stat icon={ArrowUp}><Smooth value={m ? m.net_out_total : null} fmt={fmtBytes} min="min-w-[8ch]" /></Stat>
             </InfoBox>
             <InfoBox data-stat="expiry">
               <Stat icon={CalendarClock} wrap>{expiryText(days).replace(/(\d) 天$/, '$1 天')}</Stat>

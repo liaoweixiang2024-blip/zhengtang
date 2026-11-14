@@ -176,7 +176,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             <span className="truncate" title={`出站 ${fmtBytes(today?.out ?? 0)}`}>↑ {fmtBytes(today?.out ?? 0)}</span>
           </div>
           <Foot>
-            总流量 <span className="tabular-nums">↓<SmoothValue value={fmtBytes(totalIn)} min="min-w-[7ch]" /> ↑<SmoothValue value={fmtBytes(totalOut)} min="min-w-[7ch]" /></span>
+            总流量 <span className="tabular-nums">↓<SmoothValue value={fmtBytes(totalIn)} min="min-w-[8ch]" /> ↑<SmoothValue value={fmtBytes(totalOut)} min="min-w-[8ch]" /></span>
           </Foot>
         </Block>
       </Tile>

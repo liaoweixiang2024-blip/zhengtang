@@ -207,7 +207,7 @@ function Main(props: {
   // 告警中心（独立路由，观察者从这里进；管理员的入口在后台侧边栏）
   if (path === '/alerts') {
     return (
-      <Shell siteName={siteName} siteLogo={siteLogo} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} siteLogo={siteLogo} footerText={footerText} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         <Alerts isAdmin={me.role === 'admin'} />
       </Shell>
     )
@@ -217,13 +217,13 @@ function Main(props: {
   if (path === '/admin' || path.startsWith('/admin')) {
     if (me.role !== 'admin') {
       return (
-        <Shell siteName={siteName} siteLogo={siteLogo} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+        <Shell siteName={siteName} siteLogo={siteLogo} footerText={footerText} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
           <div className="py-20 text-center text-muted-foreground">需要管理员权限</div>
         </Shell>
       )
     }
     return (
-      <Shell siteName={siteName} siteLogo={siteLogo} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} siteLogo={siteLogo} footerText={footerText} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         <Admin
           tab={parseAdminTab(path.split('?')[1] ?? '')}
           onTabChange={(k) => navigate(`/admin?tab=${k}`, true)}
@@ -238,7 +238,7 @@ function Main(props: {
   const detailServer = detailId ? servers.get(detailId) : null
   if (detailId) {
     return (
-      <Shell siteName={siteName} siteLogo={siteLogo} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
+      <Shell siteName={siteName} siteLogo={siteLogo} footerText={footerText} status={status} me={me} navigate={navigate} onLogout={onLogout} bare>
         {detailServer ? (
           <ServerDetail server={detailServer} onBack={() => navigate('/')} />
         ) : status === 'open' ? (
@@ -353,9 +353,10 @@ function Shell(props: {
   full?: boolean
   view?: ViewMode
   changeView?: (v: ViewMode) => void
+  footerText: string
   children: React.ReactNode
 }) {
-  const { siteName, siteLogo, status, me, navigate, onLogout, bare, full, view, changeView, children } = props
+  const { siteName, siteLogo, status, me, navigate, onLogout, bare, full, view, changeView, footerText, children } = props
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
       <TopBar
