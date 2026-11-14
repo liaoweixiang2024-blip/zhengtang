@@ -82,6 +82,7 @@ export type DashboardEvent =
   | { type: 'snapshot'; servers: ServerView[] }
   | { type: 'update'; server: ServerView }
   | { type: 'offline'; id: string }
+  | { type: 'resort'; ids: string[] }
 
 // 当前登录用户（/api/auth/me）
 export interface Me {

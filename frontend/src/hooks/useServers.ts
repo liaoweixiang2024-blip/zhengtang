@@ -42,6 +42,19 @@ export function useServers() {
                 if (s) next.set(msg.id, { ...s, online: false })
                 break
               }
+              case 'resort': {
+                // 后台拖拽调序：按新 id 顺序重建 Map（Map 迭代序=插入序，
+                // 逐台 set 到已有的 key 不会变位置，必须 clear 重插）
+                const byId = new Map(next)
+                next.clear()
+                for (const id of msg.ids) {
+                  const s = byId.get(id)
+                  if (s) next.set(id, s)
+                }
+                // 不在列表里的（新机器并发上线）补到尾部
+                for (const [id, s] of byId) if (!next.has(id)) next.set(id, s)
+                break
+              }
             }
             return next
           })

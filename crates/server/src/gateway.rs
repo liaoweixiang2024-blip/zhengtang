@@ -298,6 +298,9 @@ pub async fn ws_dashboard_handler(
                                     .server_view(id)
                                     .map(|v| allowed(v.group_id))
                                     .unwrap_or(false),
+                                // 顺序变更只含 id 列表、不泄露机器信息，原样放行；
+                                // viewer 端按自己可见集合重建顺序，多余的 id 被忽略
+                                DashboardEvent::Resort { .. } => true,
                             };
                             if !visible {
                                 continue;

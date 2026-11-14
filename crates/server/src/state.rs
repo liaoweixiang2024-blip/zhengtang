@@ -25,6 +25,8 @@ pub enum DashboardEvent {
     Update { server: ServerView },
     /// 单台服务器离线
     Offline { id: String },
+    /// 手动排序变更：按新顺序重建列表（拖拽调序后广播）
+    Resort { ids: Vec<String> },
 }
 
 /// /api/servers 与仪表盘推送共用的服务器视图。
@@ -204,7 +206,7 @@ impl AppState {
             .with(|c| {
                 let rows = {
                     let mut stmt = c.prepare(
-                        "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency, region FROM servers ORDER BY created_at",
+                        "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency, region FROM servers ORDER BY sort_order, created_at",
                     )?;
                     let collected: Vec<_> = stmt
                         .query_map([], |r| {

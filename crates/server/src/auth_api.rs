@@ -32,6 +32,8 @@ pub fn router() -> Router<Arc<AppState>> {
         // 管理（admin）
         .route("/api/admin/servers", get(admin_servers).post(add_server))
         .route("/api/admin/servers/{id}", patch(update_server).delete(delete_server))
+        // 手动排序（后台拖拽调序，仪表盘卡片顺序同步）
+        .route("/api/admin/servers/reorder", post(reorder_servers))
         .route("/api/admin/groups", get(list_groups).post(add_group))
         .route("/api/admin/groups/{id}", delete(delete_group))
         .route("/api/admin/users", get(list_users).post(add_user))
@@ -660,6 +662,40 @@ async fn admin_servers(State(state): State<Arc<AppState>>, jar: CookieJar) -> im
         return e;
     }
     Json(json!({ "servers": state.server_views() })).into_response()
+}
+
+#[derive(Deserialize)]
+struct ReorderBody {
+    /// 新顺序的完整 id 列表
+    ids: Vec<String>,
+}
+
+/// 手动排序：按传入顺序写 sort_order（1..n），并广播给仪表盘重建列表顺序。
+async fn reorder_servers(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    jar: CookieJar,
+    Json(body): Json<ReorderBody>,
+) -> axum::response::Response {
+    let Ok(admin) = require_admin(&state, &jar) else {
+        return err(StatusCode::FORBIDDEN, "需要管理员权限");
+    };
+    if body.ids.is_empty() || body.ids.len() > 1000 {
+        return err(StatusCode::BAD_REQUEST, "ids 为空或过多");
+    }
+    let _ = state.store.with(|c| {
+        for (i, id) in body.ids.iter().enumerate() {
+            c.execute(
+                "UPDATE servers SET sort_order = ?1 WHERE id = ?2",
+                rusqlite::params![(i + 1) as i64, id],
+            )?;
+        }
+        Ok(())
+    });
+    auth::audit_state(&state, Some(&admin), "reorder", &format!("调整主机顺序（{} 台）", body.ids.len()), &auth::client_ip(&headers, Some(peer)));
+    let _ = state.dash_tx.send(crate::state::DashboardEvent::Resort { ids: body.ids });
+    (StatusCode::OK, Json(json!({ "ok": true }))).into_response()
 }
 
 #[derive(Deserialize)]

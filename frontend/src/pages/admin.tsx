@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtBytes } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { CYCLE_LABEL, CURRENCY_SYMBOL, fmtCost, monthlyCostByCurrency } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { Bell, Info, ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2, KeyRound } from 'lucide-react'
@@ -113,6 +114,29 @@ function ServersTab({ navigate }: { navigate?: (h: string) => void }) {
   const [procServer, setProcServer] = useState<ServerView | null>(null)
   const [editServer, setEditServer] = useState<ServerView | null>(null)
   const [delServer, setDelServer] = useState<ServerView | null>(null)
+  // 拖拽调序：行 draggable，松手后本地重排并保存（仪表盘顺序同步）
+  const [dragId, setDragId] = useState<string | null>(null)
+  const dropOn = (targetId: string) => {
+    if (!dragId || dragId === targetId) {
+      setDragId(null)
+      return
+    }
+    const list = [...servers]
+    const from = list.findIndex((s) => s.id === dragId)
+    const to = list.findIndex((s) => s.id === targetId)
+    if (from < 0 || to < 0) {
+      setDragId(null)
+      return
+    }
+    list.splice(to, 0, ...list.splice(from, 1))
+    setServers(list)
+    setDragId(null)
+    fetch('/api/admin/servers/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: list.map((s) => s.id) }),
+    })
+  }
   const openDetail = (id: string) => (navigate ? navigate(`/server/${id}`) : location.assign(`/server/${id}`))
 
   const load = useCallback(() => {
@@ -146,11 +170,14 @@ function ServersTab({ navigate }: { navigate?: (h: string) => void }) {
       <CardHeader className="flex-row items-center justify-between">
         <div>
           <CardTitle className="text-base">服务器（{servers.length}）</CardTitle>
-          {costStats.length > 0 && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              月均合计：{costStats.map((c) => `${CURRENCY_SYMBOL[c.currency] ?? c.currency}${c.monthly.toFixed(1)}/月`).join(' · ')}
-            </p>
-          )}
+          <p className="mt-1 text-xs text-muted-foreground">
+            {costStats.length > 0 && (
+              <>
+                月均合计：{costStats.map((c) => `${CURRENCY_SYMBOL[c.currency] ?? c.currency}${c.monthly.toFixed(1)}/月`).join(' · ')} ·{' '}
+              </>
+            )}
+            拖动行可调整顺序（仪表盘卡片同步）
+          </p>
         </div>
         <AddServerDialog open={addOpen} onOpenChange={setAddOpen} onAdd={add} installCmd={installCmd} onCopy={() => setInstallCmd(null)} />
         {dialServer && <DialDialog server={dialServer} onClose={() => setDialServer(null)} />}
@@ -183,7 +210,21 @@ function ServersTab({ navigate }: { navigate?: (h: string) => void }) {
           </TableHeader>
           <TableBody>
             {servers.map((s) => (
-              <TableRow key={s.id} className="cursor-pointer" onClick={() => openDetail(s.id)} title="点击查看详情">
+              <TableRow
+                key={s.id}
+                className={cn(
+                  'cursor-pointer',
+                  dragId === s.id && 'opacity-40',
+                  dragId && dragId !== s.id && 'border-t-2 border-t-transparent',
+                )}
+                draggable
+                onDragStart={() => setDragId(s.id)}
+                onDragEnd={() => setDragId(null)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => dropOn(s.id)}
+                onClick={() => openDetail(s.id)}
+                title="点击查看详情 · 拖动行可调整顺序（仪表盘同步）"
+              >
                 <TableCell className="font-medium">{s.name}</TableCell>
                 <TableCell className="hidden text-xs md:table-cell">{fmtExpiresCell(s.expires_at)}</TableCell>
                 <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
