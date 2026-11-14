@@ -233,7 +233,24 @@ function Block({
   const [open, setOpen] = useState(false)
   const [spot, setSpot] = useState<{ top: number; left?: number; right?: number; width: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const hasRows = !!rows?.length
+
+  // 面板是 fixed 定位，页面一滚它就和触发块错位（悬空）——滚动或改窗口时直接收起；
+  // 明细列表自身的内部滚动不算（panelRef 内的 scroll 事件跳过）
+  useEffect(() => {
+    if (!open) return
+    const close = (e: Event) => {
+      if (e.target instanceof Node && panelRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
+    addEventListener('scroll', close, true)
+    addEventListener('resize', close)
+    return () => {
+      removeEventListener('scroll', close, true)
+      removeEventListener('resize', close)
+    }
+  }, [open])
   const enter = () => {
     if (!hasRows) return
     const el = ref.current
@@ -263,6 +280,7 @@ function Block({
         spot &&
         createPortal(
           <div
+            ref={panelRef}
             style={{ position: 'fixed', top: spot.top, width: spot.width, ...(spot.left != null ? { left: spot.left } : { right: spot.right }) }}
             className="z-[70]"
             onMouseEnter={() => setOpen(true)}
