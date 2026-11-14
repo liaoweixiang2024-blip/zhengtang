@@ -136,9 +136,6 @@ export function ServerCard({ server }: { server: ServerView }) {
   const trafficPct = quota && quota > 0 ? Math.min((server.month_traffic / quota) * 100, 100) : null
 
   const days = expiryDays(server.expires_at)
-  // IPv4 展示优先手填；没填时用 agent 连接 IP（公网才展示，内网地址不外露）
-  const ipv4 = server.ipv4 ?? (/^(\d+\.){3}\d+$/.test(server.last_ip ?? '') ? server.last_ip : null)
-
   return (
     <Card className={cn('min-w-0 gap-0 p-4 transition-colors hover:ring-foreground/25', !online && 'opacity-60')}>
       {/* 身份行：旗子 + 名字（jikasei：在线与否写在元信息行，不再挂圆点） */}
@@ -156,24 +153,7 @@ export function ServerCard({ server }: { server: ServerView }) {
         {cost && <span className="tnum shrink-0">{cost}</span>}
       </div>
 
-      {/* 线路徽章（｜·、分隔拆开渲染）与档案行（IP·备注）：有则显示，无则整块消失 */}
-      {(server.line || server.bandwidth_mbps) && (
-        <div className="mt-2 flex flex-wrap items-center gap-1">
-          {(server.line ?? '').split(/[|｜·、,，]/).filter(Boolean).map((tag) => (
-            <span key={tag} className="rounded bg-secondary px-1.5 py-px text-[10px] leading-4 text-secondary-foreground">
-              {tag.trim()}
-            </span>
-          ))}
-          {server.bandwidth_mbps != null && (
-            <span className="tnum rounded bg-secondary px-1.5 py-px text-[10px] leading-4 text-secondary-foreground">{server.bandwidth_mbps}M</span>
-          )}
-        </div>
-      )}
-      {(ipv4 || server.ipv6 || server.remark) && (
-        <p className="tnum mt-1.5 truncate text-[10px] leading-4 text-muted-foreground/80">
-          {[ipv4, server.ipv6, server.remark].filter(Boolean).join(' · ')}
-        </p>
-      )}
+
 
       {/* 无数据/掉线：同一副骨架灰显（与在线卡等高），读数为 — */}
       <>

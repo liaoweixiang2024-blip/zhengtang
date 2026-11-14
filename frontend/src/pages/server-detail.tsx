@@ -132,11 +132,6 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
         <Card className="py-4">
           <CardContent className="grid grid-cols-2 gap-4 px-4 text-sm sm:grid-cols-4">
             <InfoItem label="地区" value={server.region ?? '—'} />
-            <InfoItem label="线路" value={server.line ?? '—'} />
-            <InfoItem label="带宽" value={server.bandwidth_mbps ? `${server.bandwidth_mbps} Mbps` : '—'} />
-            <InfoItem label="IPv4" value={server.ipv4 ?? '—'} />
-            <InfoItem label="IPv6" value={server.ipv6 ?? '—'} />
-            <InfoItem label="备注" value={server.remark ?? '—'} />
             <InfoItem label="系统" value={si.os} />
             <InfoItem label="内核" value={si.kernel} />
             <InfoItem label="架构" value={si.arch} />

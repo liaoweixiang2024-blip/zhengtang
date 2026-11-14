@@ -71,16 +71,6 @@ export interface ServerView {
   price_per_cycle: number | null
   currency: string | null
   region: string | null
-  /** 线路标注（如 CN2 GIA） */
-  line: string | null
-  /** 带宽（Mbps） */
-  bandwidth_mbps: number | null
-  ipv4: string | null
-  ipv6: string | null
-  /** 商家备注（如 VPS BY DMIT.io） */
-  remark: string | null
-  /** agent 最近连接 IP */
-  last_ip: string | null
   public_visible: boolean
   system_info: SystemInfo | null
   metrics: RealtimeMetrics | null
