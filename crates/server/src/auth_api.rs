@@ -100,6 +100,57 @@ fn flag_of(code: &str) -> String {
     format!("{}{}", char::from_u32(a).unwrap_or('🇦'), char::from_u32(b).unwrap_or('🇦'))
 }
 
+/// 自动识别（agent 上线时调用）：region 已设或出口 IP 是内网则跳过，成功写入并广播。
+/// 哪吒同款体验——机器一连上，地区自动就位，无需任何人手动点。
+pub(crate) async fn auto_detect_region(state: &Arc<AppState>, id: &str) {
+    let (region, ip): (Option<String>, Option<String>) = state
+        .store
+        .with(|c| {
+            Ok(c.query_row(
+                "SELECT region, last_ip FROM servers WHERE id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?)
+        })
+        .unwrap_or((None, None));
+    if region.is_some() {
+        return;
+    }
+    let Some(ip) = ip.filter(|v| !v.is_empty()) else { return };
+    if is_private_ip(&ip) {
+        return; // frp 纯 TCP 未开 PPv2 等场景：拿不到真实出口，静默留给手填/名字猜
+    }
+    if let Some(reg) = query_region_by_ip(&ip).await {
+        let _ = state.store.with(|c| {
+            c.execute("UPDATE servers SET region = ?1 WHERE id = ?2", rusqlite::params![reg, id])?;
+            Ok(())
+        });
+        if let Some(v) = state.server_view(id) {
+            let _ = state.dash_tx.send(crate::state::DashboardEvent::Update { server: v });
+        }
+        tracing::info!(server = id, ip = %ip, region = %reg, "地区自动识别完成");
+    }
+}
+
+/// ip-api 查询归属地 → "🇭🇰 香港"（失败返回 None）。
+async fn query_region_by_ip(ip: &str) -> Option<String> {
+    let url = format!("http://ip-api.com/json/{ip}?fields=status,countryCode,country&lang=zh-CN");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .ok()?;
+    let json: serde_json::Value = client.get(&url).send().await.ok()?.json().await.ok()?;
+    if json["status"].as_str() != Some("success") {
+        return None;
+    }
+    let code = json["countryCode"].as_str()?.to_uppercase();
+    if code.len() != 2 {
+        return None;
+    }
+    let country = json["country"].as_str().unwrap_or(&code).to_string();
+    Some(if country.is_empty() { code } else { format!("{} {}", flag_of(&code), country) })
+}
+
 /// 地区自动识别：按该机 agent 最近连接 IP 查询归属地（ip-api.com，仅传 IP），
 /// 成功则写入 region（"🇭🇰 香港" 格式）并广播。
 async fn detect_region(

@@ -73,7 +73,17 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket, peer_ip: Str
     };
     tracing::info!(agent = %agent_id, "agent 上线");
 
-    // 3. 注册实时状态并回 HelloOk
+    // 3. 注册实时状态并回 HelloOk（上线即落 last_ip：地区识别要用，不等 60s 定时器）
+    state.persist_agent_seen(&agent_id, &peer_ip);
+    // 哪吒同款：region 为空且出口 IP 公网时自动定位一次（失败静默；frp 未开 PPv2
+    // 时拿不到真实 IP，留给手填或编辑对话框的名字猜默认值）
+    {
+        let state2 = state.clone();
+        let id = agent_id.clone();
+        tokio::spawn(async move {
+            crate::auth_api::auto_detect_region(&state2, &id).await;
+        });
+    }
     let now = Instant::now();
     state.live.insert(
         agent_id.clone(),
