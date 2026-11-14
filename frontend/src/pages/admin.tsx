@@ -865,8 +865,14 @@ function SettingsTab() {
               https://ghfast.top/https://github.com/liaoweixiang2024-blip/zhengtang/releases
             </p>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {saved && <p className="text-sm text-emerald-600">已保存</p>}
+          {/* 状态行恒占一行高：提示出现/消失不把按钮顶得跳动 */}
+          <div className="flex min-h-5 items-center text-sm">
+            {error ? (
+              <p className="text-destructive">{error}</p>
+            ) : saved ? (
+              <p className="text-emerald-600">已保存</p>
+            ) : null}
+          </div>
           <Button type="submit">保存设置</Button>
         </form>
       </CardContent>
@@ -979,19 +985,19 @@ function UpdateTab() {
           </p>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {busy ? (
-          <p className="text-sm text-muted-foreground">
-            正在更新到 {version || '…'}：下载校验后自动热切换，服务中断几秒，
-            完成后本页自动刷新…
-          </p>
-        ) : done ? (
-          <p className="text-sm text-emerald-600">✓ 已更新到 {version}，正在刷新…</p>
-        ) : (
-          <Button type="button" onClick={run} disabled={!version || checking}>
-            更新到 {version || '指定版本'}
+        {/* 按钮恒在（busy 时转"更新中…"），状态文字换到旁边——高度恒定不跳动 */}
+        <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1">
+          <Button type="button" onClick={run} disabled={!version || checking || busy}>
+            {busy ? '更新中…' : `更新到 ${version || '指定版本'}`}
           </Button>
-        )}
+          {busy && (
+            <span className="text-sm text-muted-foreground">
+              下载校验后自动热切换，服务中断几秒，完成后本页自动刷新
+            </span>
+          )}
+          {done && !busy && <span className="text-sm text-emerald-600">✓ 已更新到 {version}，正在刷新…</span>}
+          {error && !busy && <span className="text-sm text-destructive">{error}</span>}
+        </div>
         <p className="text-xs text-muted-foreground">
           更新流程：下载 release 包 → sha256 校验 → 原子替换二进制 → 无缝热切换（进程不重启、数据不丢）；
           失败时旧版本继续运行。
