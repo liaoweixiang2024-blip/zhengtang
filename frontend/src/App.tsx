@@ -36,13 +36,13 @@ function usePathRoute(): [string, (to: string, replace?: boolean) => void] {
   return [path, navigate]
 }
 
-interface Site { site_name: string; site_description: string; public_page_enabled: boolean; globe_enabled: boolean; site_logo: string }
+interface Site { site_name: string; site_description: string; public_page_enabled: boolean; globe_enabled: boolean; site_logo: string; footer_text: string }
 
 export default function App() {
   const [path, navigate] = usePathRoute()
   const [me, setMe] = useState<Me | null | undefined>(undefined) // undefined=加载中
   const [setupNeeded, setSetupNeeded] = useState(false)
-  const [site, setSite] = useState<Site>({ site_name: 'zhengtang', site_description: '', public_page_enabled: true, globe_enabled: true, site_logo: '' })
+  const [site, setSite] = useState<Site>({ site_name: 'zhengtang', site_description: '', public_page_enabled: true, globe_enabled: true, site_logo: '', footer_text: '' })
   const [view, setView] = useState<ViewMode>(
     () => (localStorage.getItem(VIEW_KEY) as ViewMode) || 'detailed',
   )
@@ -68,6 +68,7 @@ export default function App() {
           public_page_enabled: d.public_page_enabled !== false,
           globe_enabled: d.globe_enabled !== false,
           site_logo: d.site_logo || '',
+          footer_text: d.footer_text || '',
         }
         setSite(s)
         // SEO：动态 title/description（SPA 环境下对执行 JS 的爬虫生效）
@@ -154,6 +155,7 @@ export default function App() {
     setGroup={setGroup}
     onLogout={logout}
     globeEnabled={site.globe_enabled}
+    footerText={site.footer_text}
   />
 }
 
@@ -169,8 +171,9 @@ function Main(props: {
   setGroup: (g: number | 'all') => void
   onLogout: () => void
   globeEnabled: boolean
+  footerText: string
 }) {
-  const { siteName, siteLogo, path, navigate, me, view, changeView, group, setGroup, onLogout, globeEnabled } = props
+  const { siteName, siteLogo, path, navigate, me, view, changeView, group, setGroup, onLogout, globeEnabled, footerText } = props
   const { servers, status, ready } = useServers()
   // 暗色（地球扫掠线透明度用）：跟着 <html class=dark> 走
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -376,7 +379,7 @@ function Shell(props: {
       </main>
       {!bare && (
         <footer className="mt-auto pb-6 pt-2 text-center text-xs text-muted-foreground">
-          zhengtang · 严格只读探针
+          {footerText || 'zhengtang · 严格只读探针'}
         </footer>
       )}
     </div>

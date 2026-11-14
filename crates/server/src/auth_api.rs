@@ -1631,6 +1631,7 @@ struct SettingsBody {
     globe_enabled: Option<bool>,
     /// 在线更新源（空 = GitHub 官方；长度上限防滥用）
     update_base: Option<String>,
+    footer_text: Option<String>,
 }
 
 async fn put_settings(
@@ -1673,6 +1674,12 @@ async fn put_settings(
             return err(StatusCode::BAD_REQUEST, "更新源必须以 http(s):// 开头");
         }
         s.update_base = v;
+    }
+    if let Some(v) = body.footer_text {
+        if v.chars().count() > 64 {
+            return err(StatusCode::BAD_REQUEST, "页脚文字 ≤64 字符");
+        }
+        s.footer_text = v.trim().to_string();
     }
     state.set_settings(&s);
     auth::audit_state(&state, Some(&admin), "settings", "更新站点设置", &auth::client_ip(&headers, Some(peer)));

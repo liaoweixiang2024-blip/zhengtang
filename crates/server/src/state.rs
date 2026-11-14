@@ -71,6 +71,8 @@ pub struct SiteSettings {
     pub globe_enabled: bool,
     /// 在线更新源（空 = GitHub 官方 releases；国内可填 ghfast 镜像前缀）
     pub update_base: String,
+    /// 前台页脚文字（空 = 默认「zhengtang · 严格只读探针」）
+    pub footer_text: String,
 }
 
 impl Default for SiteSettings {
@@ -82,6 +84,7 @@ impl Default for SiteSettings {
             public_page_enabled: true,
             globe_enabled: true,
             update_base: String::new(),
+            footer_text: String::new(),
         }
     }
 }
@@ -287,6 +290,7 @@ impl AppState {
             if let Some(v) = get("public_page_enabled") { s.public_page_enabled = v != "0"; }
             if let Some(v) = get("globe_enabled") { s.globe_enabled = v != "0"; }
             if let Some(v) = get("update_base") { s.update_base = v; }
+            if let Some(v) = get("footer_text") { s.footer_text = v; }
             Ok(())
         });
         s
@@ -300,6 +304,7 @@ impl AppState {
                 ("public_page_enabled", if s.public_page_enabled { "1".into() } else { "0".into() }),
                 ("globe_enabled", if s.globe_enabled { "1".into() } else { "0".into() }),
                 ("update_base", s.update_base.clone()),
+                ("footer_text", s.footer_text.clone()),
             ] {
                 c.execute(
                     "INSERT INTO settings (key, value) VALUES (?1, ?2)

@@ -768,6 +768,7 @@ function SettingsTab() {
   const [logoBusy, setLogoBusy] = useState(false)
   const [publicEnabled, setPublicEnabled] = useState(true)
   const [globeEnabled, setGlobeEnabled] = useState(true)
+  const [footerText, setFooterText] = useState('')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [loaded, setLoaded] = useState(false)
@@ -783,6 +784,7 @@ function SettingsTab() {
         setLogo(d.site_logo ?? '')
         setPublicEnabled(d.public_page_enabled !== false)
         setGlobeEnabled(d.globe_enabled !== false)
+        setFooterText(d.footer_text ?? '')
         setLoaded(true)
       })
   }, [])
@@ -827,6 +829,7 @@ function SettingsTab() {
         site_description: description,
         public_page_enabled: publicEnabled,
         globe_enabled: globeEnabled,
+        footer_text: footerText,
       }),
     })
     if (!res.ok) {
@@ -891,6 +894,11 @@ function SettingsTab() {
             <Label>站点描述（SEO）</Label>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="网页 meta description" maxLength={160} />
             <p className="text-xs text-muted-foreground">写入 &lt;meta name=description&gt;，供搜索引擎摘要（≤160 字符）</p>
+          </div>
+          <div className="space-y-2">
+            <Label>前台页脚文字</Label>
+            <Input value={footerText} onChange={(e) => setFooterText(e.target.value)} placeholder="留空 = zhengtang · 严格只读探针" maxLength={64} />
+            <p className="text-xs text-muted-foreground">首页/详情页底部的落款，支持 ICP 备案号等（≤64 字符）</p>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div>

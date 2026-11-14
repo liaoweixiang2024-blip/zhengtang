@@ -104,6 +104,7 @@ async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         "setup_needed": user_count == 0,
         "site_name": st.site_name,
         "site_description": st.site_description,
+        "footer_text": st.footer_text,
         "site_logo": st.site_logo,
         "public_page_enabled": st.public_page_enabled,
         "globe_enabled": st.globe_enabled,
