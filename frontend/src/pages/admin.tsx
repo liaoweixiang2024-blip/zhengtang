@@ -1100,6 +1100,19 @@ function UpdateTab() {
 
 // ---------- 服务器编辑（到期/购买/流量配额/重置日/分组/公开展示） ----------
 
+/** 表单字段：标签行（右侧可挂行内提示按钮）+ 控件，全弹窗统一节奏 */
+function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex h-5 items-center justify-between">
+        <Label>{label}</Label>
+        {hint}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 const GB = 1024 ** 3
 
 function EditServerDialog({
@@ -1179,14 +1192,12 @@ function EditServerDialog({
           <DialogDescription>基本信息、费用与流量账期，按节分组填写</DialogDescription>
         </DialogHeader>
         <form onSubmit={save} className="space-y-4">
-          {/* —— 基本信息 —— */}
-          <section className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>名称</Label>
+          {/* 规则两列网格：所有字段同宽同行对齐，无嵌套格；窄屏自动单列 */}
+          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+            <Field label="名称">
               <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>分组</Label>
+            </Field>
+            <Field label="分组">
               <Select value={groupId} onValueChange={setGroupId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -1194,9 +1205,8 @@ function EditServerDialog({
                   {groups.map((g) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>地区</Label>
+            </Field>
+            <Field label="地区">
               <Select
                 value={region}
                 onValueChange={async (v) => {
@@ -1223,101 +1233,83 @@ function EditServerDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </section>
-
-          {/* —— 费用与到期 —— */}
-          <section className="space-y-3 border-t border-border pt-3">
-            <p className="text-xs font-medium text-muted-foreground">费用与到期</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label>到期日</Label>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                    onClick={() => setExpires('')}
-                  >
-                    {expires ? '设为长期' : '长期有效 ✓'}
-                  </button>
-                </div>
-                <Input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>购买时间</Label>
-                <Input type="date" value={purchased} onChange={(e) => setPurchased(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>付费周期</Label>
-                <Select value={payCycle} onValueChange={setPayCycle}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">未填写</SelectItem>
-                    {Object.entries(CYCLE_LABEL).map(([m, label]) => (
-                      <SelectItem key={m} value={m}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>每期费用</Label>
-                <div className="flex gap-2">
-                  <Input
-                    inputMode="decimal"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder={payCycle === '-1' ? '免费' : '留空=不计'}
-                    disabled={payCycle === 'none' || payCycle === '-1'}
-                  />
-                  <Select value={currency} onValueChange={setCurrency} disabled={payCycle === 'none' || payCycle === '-1'}>
-                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Object.keys(CURRENCY_SYMBOL).map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* —— 流量 —— */}
-          <section className="space-y-3 border-t border-border pt-3">
-            <p className="text-xs font-medium text-muted-foreground">流量</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>流量配额 (GB/月)</Label>
-                <Input inputMode="decimal" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="留空=不限" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>流量重置日</Label>
-                <Select value={resetDay} onValueChange={setResetDay}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="natural">按自然月（1 号）</SelectItem>
-                    {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                      <SelectItem key={d} value={String(d)}>每月 {d} 日</SelectItem>
-                    ))}
-                    <SelectItem value="29">每月 29 日（2 月按月末）</SelectItem>
-                    <SelectItem value="30">每月 30 日（2 月按月末）</SelectItem>
-                    <SelectItem value="31">每月 31 日（小月按月末）</SelectItem>
-                    <SelectItem value="99">每月月末（自动跟随当月最后一天）</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {purchased && resetDay === 'natural' && (
-              <p className="text-xs text-muted-foreground">
-                提示：已填购买时间，可把重置日设为购买日对应的日子，流量将按购买日对齐的账期统计
-              </p>
-            )}
-          </section>
+            </Field>
+            <Field
+              label="到期日"
+              hint={
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  onClick={() => setExpires('')}
+                >
+                  {expires ? '设为长期' : '长期有效 ✓'}
+                </button>
+              }
+            >
+              <Input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
+            </Field>
+            <Field label="购买时间">
+              <Input type="date" value={purchased} onChange={(e) => setPurchased(e.target.value)} />
+            </Field>
+            <Field label="付费周期">
+              <Select value={payCycle} onValueChange={setPayCycle}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">未填写</SelectItem>
+                  {Object.entries(CYCLE_LABEL).map(([m, label]) => (
+                    <SelectItem key={m} value={m}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="每期费用">
+              <Input
+                inputMode="decimal"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder={payCycle === '-1' ? '免费' : '留空=不计'}
+                disabled={payCycle === 'none' || payCycle === '-1'}
+              />
+            </Field>
+            <Field label="货币">
+              <Select value={currency} onValueChange={setCurrency} disabled={payCycle === 'none' || payCycle === '-1'}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.keys(CURRENCY_SYMBOL).map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="流量配额 (GB/月)">
+              <Input inputMode="decimal" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="留空=不限" />
+            </Field>
+            <Field label="流量重置日">
+              <Select value={resetDay} onValueChange={setResetDay}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="natural">按自然月（1 号）</SelectItem>
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                    <SelectItem key={d} value={String(d)}>每月 {d} 日</SelectItem>
+                  ))}
+                  <SelectItem value="29">每月 29 日（2 月按月末）</SelectItem>
+                  <SelectItem value="30">每月 30 日（2 月按月末）</SelectItem>
+                  <SelectItem value="31">每月 31 日（小月按月末）</SelectItem>
+                  <SelectItem value="99">每月月末（自动跟随当月最后一天）</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
 
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <span className="text-sm">公开展示（/public 匿名可见）</span>
             <Switch checked={publicVisible} onCheckedChange={setPublicVisible} />
           </div>
+          {purchased && resetDay === 'natural' && (
+            <p className="text-xs text-muted-foreground">
+              提示：已填购买时间，可把重置日设为购买日对应的日子，流量将按购买日对齐的账期统计
+            </p>
+          )}
           <div className="flex items-center gap-3">
             <p className="min-h-5 flex-1 text-sm text-destructive">{error}</p>
             <Button type="submit" disabled={busy}>
