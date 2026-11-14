@@ -1,36 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * 数值平滑：目标值变化时在 duration 内缓动插值（rAF），数字"滑"过去而不是 3 秒一跳。
- * 节奏口径（2026-11-15 调优）：概览/卡片每 3s 刷新，600ms 完成时数字翻得太快太忙，
- * 放缓到 1600ms——缓动绵长、每帧变化量小，观感是"缓缓逼近"而不是"快速翻动"。
- * NaN/Infinity（离线无数据）直接跳变不插值。
+ * 数值定格：目标值变化后**不滚动**，安静地保持旧值一拍（delay），然后一次性切到新值。
+ * （2026-11-15 两轮调优的结论：600ms/1600ms 的缓动滚动都被站长嫌"忙"——
+ * 数字翻动的中间过程本身就是噪声，砍掉，只留一次安静的切换。）
+ * NaN/Infinity（离线无数据）不参与延迟，直接切。
  */
-export function useSmoothNumber(target: number, duration = 1600): number {
+export function useSmoothNumber(target: number, delay = 1000): number {
   const [display, setDisplay] = useState(target)
-  const fromRef = useRef(target)
-  const rafRef = useRef(0)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const from = fromRef.current
-    if (from === target || !Number.isFinite(target) || !Number.isFinite(from)) {
-      fromRef.current = target
-      setDisplay(target)
+    if (display === target || !Number.isFinite(target)) {
+      if (!Number.isFinite(target)) setDisplay(target)
       return
     }
-    const start = performance.now()
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration)
-      const eased = 1 - Math.pow(1 - t, 3) // easeOutCubic：先快后缓，收尾稳
-      const v = from + (target - from) * eased
-      fromRef.current = v
-      setDisplay(v)
-      if (t < 1) rafRef.current = requestAnimationFrame(tick)
+    timer.current = setTimeout(() => setDisplay(target), delay)
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
     }
-    cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [target, duration])
+  }, [target, delay, display])
 
   return display
 }
