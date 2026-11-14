@@ -135,7 +135,7 @@ function ChannelsTab() {
           <Input value={config} onChange={(e) => setConfig(e.target.value)} placeholder={placeholder[type]} className="md:col-span-2 font-mono text-xs" />
           <Button type="submit"><Plus className="size-4" /> 添加</Button>
         </form>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        <p className="min-h-5 text-sm text-destructive">{error}</p>
         <Table>
           <TableBody>
             {channels.map((ch) => (

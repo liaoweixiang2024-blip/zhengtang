@@ -62,7 +62,7 @@ export function Login({ setupNeeded, siteName, onDone }: { setupNeeded: boolean;
               <Input id="totp" inputMode="numeric" maxLength={6} value={totp} onChange={(e) => setTotp(e.target.value)} placeholder="6 位验证码" autoFocus />
             </div>
           )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <p className="min-h-5 text-sm text-destructive">{error}</p>
           <Button type="submit" className="w-full" disabled={busy}>
             {busy ? '请稍候…' : setupNeeded ? '创建管理员并登录' : '登录'}
           </Button>

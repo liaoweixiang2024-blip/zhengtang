@@ -61,9 +61,9 @@ export function Admin({ tab, onTabChange, navigate }: {
               key={key}
               onClick={() => select(key)}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm outline-none transition-colors ${
+              className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors ${
                 isActive
-                  ? 'bg-secondary font-medium'
+                  ? 'bg-secondary text-secondary-foreground'
                   : 'text-muted-foreground hover:bg-muted'
               }`}
             >
@@ -408,7 +408,7 @@ function UsersTab() {
           </Select>
           <Button type="submit">添加</Button>
         </form>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        <p className="min-h-5 text-sm text-destructive">{error}</p>
         <Table>
           <TableHeader>
             <TableRow>
@@ -617,7 +617,7 @@ function DialDialog({ server, onClose }: { server: ServerView; onClose: () => vo
             <Input value={interval} onChange={(e) => setInterval(e.target.value)} type="number" min={10} title="间隔秒" className="col-span-1" />
             <Button type="submit" className="col-span-5" size="sm"><Plus className="size-4" /> 添加任务</Button>
           </form>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <p className="min-h-5 text-sm text-destructive">{error}</p>
         </div>
       </DialogContent>
     </Dialog>
@@ -684,7 +684,7 @@ function ProcDialog({ server, onClose }: { server: ServerView; onClose: () => vo
             </Button>
             <Button type="submit" size="sm"><Plus className="size-4" /></Button>
           </form>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <p className="min-h-5 text-sm text-destructive">{error}</p>
         </div>
       </DialogContent>
     </Dialog>
@@ -1128,7 +1128,7 @@ function EditServerDialog({
                   ))}
                 </SelectContent>
               </Select>
-              {error && <p className="text-xs text-destructive">{error}</p>}
+              <p className="min-h-4 text-xs text-destructive">{error}</p>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -1205,7 +1205,7 @@ function EditServerDialog({
               提示：已填购买时间，可把重置日设为购买日对应的日子，流量将按购买日对齐的账期统计
             </p>
           )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <p className="min-h-5 text-sm text-destructive">{error}</p>
           <Button type="submit" className="w-full" disabled={busy}>
             {busy ? '保存中…' : '保存'}
           </Button>

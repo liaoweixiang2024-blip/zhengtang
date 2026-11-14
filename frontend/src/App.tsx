@@ -29,6 +29,8 @@ function usePathRoute(): [string, (to: string, replace?: boolean) => void] {
   const navigate = (to: string, replace = false) => {
     if (replace) history.replaceState(null, '', to)
     else history.pushState(null, '', to)
+    // 切页回顶：旧页的滚动位置若带进新页，内容高度一变视口就"跳一下"
+    window.scrollTo(0, 0)
     setPath(to)
   }
   return [path, navigate]

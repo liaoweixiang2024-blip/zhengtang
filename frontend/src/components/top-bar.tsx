@@ -197,7 +197,7 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               onKeyDown={(e) => e.key === 'Enter' && submit()}
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <p className="min-h-5 text-sm text-destructive">{error}</p>
           {ok && <p className="text-sm text-emerald-600">✓ 已修改</p>}
         </div>
         <DialogFooter>
