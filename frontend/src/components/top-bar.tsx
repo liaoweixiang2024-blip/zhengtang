@@ -61,12 +61,15 @@ export function TopBar(props: {
           {me === undefined ? null : me ? (
             <>
               {view && changeView && <CardStyleMenu value={view} onPick={changeView} />}
+              <ThemeToggle />
               <UserMenu me={me} navigate={navigate} onLogout={onLogout} />
             </>
           ) : showLogin ? (
-            <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>登录</Button>
+            <>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>登录</Button>
+              <ThemeToggle />
+            </>
           ) : null}
-          <ThemeToggle />
         </div>
       </div>
     </header>
@@ -88,14 +91,23 @@ export function UserMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" title={`${me.username} · 账号菜单`} aria-label="账号菜单">
+          <Button variant="ghost" size="icon" className="rounded-full" title={`${me.username} · 账号菜单`} aria-label="账号菜单">
             <UserRound />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuLabel>
-            <div className="truncate text-sm font-medium">{me.username}</div>
-            <div className="text-xs font-normal text-muted-foreground">{admin ? '管理员' : '观察者'}</div>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="py-2.5">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                <UserRound className="size-4 text-muted-foreground" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium leading-tight">{me.username}</span>
+                <span className="mt-0.5 inline-block rounded-full bg-secondary px-1.5 py-px text-[10px] leading-none text-secondary-foreground">
+                  {admin ? '管理员' : '观察者'}
+                </span>
+              </span>
+            </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setPwOpen(true)}>
