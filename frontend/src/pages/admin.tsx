@@ -45,13 +45,17 @@ export function Admin({ tab, onTabChange, navigate }: {
   navigate?: (h: string) => void
 }) {
   const [inner, setInner] = useState<NavKey>('servers')
+  const [version, setVersion] = useState('')
   const active = tab ?? inner
   const select = (k: NavKey) => {
     setInner(k)
     onTabChange?.(k)
   }
+  useEffect(() => {
+    fetch('/api/status').then((r) => r.json()).then((d) => setVersion(d.version ?? '')).catch(() => {})
+  }, [])
   return (
-    <div className="flex flex-col gap-6 md:flex-row">
+    <div className="flex flex-col gap-6 md:flex-row md:flex-wrap">
       {/* 侧边导航（monitor-probe 同款）：窄屏横向滚动，宽屏左列 44 宽；激活=浅底半粗 */}
       <nav className="flex gap-1 overflow-x-auto pb-1 md:w-44 md:shrink-0 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0">
         {NAV.map(({ key, label, icon: Icon }) => {
@@ -82,6 +86,18 @@ export function Admin({ tab, onTabChange, navigate }: {
         {active === 'settings' && <SettingsTab />}
         {active === 'update' && <UpdateTab />}
       </div>
+      {/* 页脚：版权 + 版本号 + 站点设置的快捷入口 */}
+      <footer className="flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-border pt-4 text-xs text-muted-foreground">
+        <span>© {new Date().getFullYear()} zhengtang · 严格只读探针</span>
+        {version && <span className="tabular-nums">v{version}</span>}
+        <button
+          type="button"
+          className="underline-offset-2 transition-colors hover:text-foreground hover:underline"
+          onClick={() => select('settings')}
+        >
+          站点设置
+        </button>
+      </footer>
     </div>
   )
 }
