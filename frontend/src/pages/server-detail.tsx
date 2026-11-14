@@ -136,9 +136,10 @@ export function ServerDetail({ server, onBack }: { server: ServerView; onBack: (
             <InfoItem label="内核" value={si.kernel} />
             <InfoItem label="架构" value={si.arch} />
             <InfoItem label="虚拟化" value={si.virt} />
-            {/* 核数优先取实时每核数组长度（=vCPU，口径同 top/任务管理器）；
-                老 agent 的物理核探测在部分虚拟化内核下会得出 1（"2 核识别为 1 核"） */}
-            <InfoItem label="CPU" value={`${si.cpu_model} (${m ? m.cpu_per_core.length : si.cpu_cores} 核)`} />
+            {/* 核数优先取实时每核数组长度（=vCPU 逻辑处理器，口径同 top/nproc）；
+                老 agent 的物理核探测在部分虚拟化内核下会得出 1（"2 核识别为 1 核"）。
+                物理核（如 8505 的 5 核）需协议加字段，待下个大版本 */}
+            <InfoItem label="CPU" value={`${si.cpu_model} (${m ? m.cpu_per_core.length : si.cpu_cores} vCPU)`} />
             <InfoItem label="内存" value={fmtBytes(si.mem_total)} />
             {/* 磁盘与首页卡片同口径：最大挂载（NAS 数据卷）；
                 老 agent 的 disk_total 是多分区相加，会把系统分区也计入 */}

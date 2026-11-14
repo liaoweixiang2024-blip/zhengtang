@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # zhengtang-server 安装（Linux systemd）
-set -euo pipefail
+# curl | sh 时 shebang 不生效（可能被 dash 执行）——pipefail 能力探测开启
+set -eu
+(set -o pipefail) 2>/dev/null && set -o pipefail
 
 # root 预检：写 /usr/local/bin 与 systemd 单元都需要 root，晚失败不如早失败
 [ "$(id -u)" = 0 ] || { echo "请用 root 运行（curl -fsSL <url> | sudo sh）"; exit 1; }

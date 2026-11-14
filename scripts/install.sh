@@ -4,7 +4,11 @@
 #   curl -fsSL https://<server>/install.sh | sh -s -- \
 #     --server wss://<server>:8800/ws/agent \
 #     --id <agent_id> --key <hex> --fingerprint <hex>
-set -euo pipefail
+#
+# 兼容性：curl | sh 时 shebang 不生效，脚本可能被 dash（Ubuntu 默认 sh）执行
+# ——pipefail 是 bash 专属，能力探测开启，dash 下静默跳过
+set -eu
+(set -o pipefail) 2>/dev/null && set -o pipefail
 
 # ---------- 参数 ----------
 # 默认取面板注入的 ZT_*（短安装命令 /a/<token> 场景）；命令行参数可覆盖

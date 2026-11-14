@@ -154,7 +154,7 @@ export function ServerCard({ server }: { server: ServerView }) {
           <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4">
             <Meter
               icon={Cpu}
-              label={si ? `CPU ${m ? m.cpu_per_core.length : si.cpu_cores} 核` : 'CPU'}
+              label={si ? `CPU ${m ? m.cpu_per_core.length : si.cpu_cores} vCPU` : 'CPU'}
               pct={m ? m.cpu_usage : null}
               foot={m ? `${m.load1.toFixed(2)} ${m.load5.toFixed(2)} ${m.load15.toFixed(2)}` : '—'}
             />

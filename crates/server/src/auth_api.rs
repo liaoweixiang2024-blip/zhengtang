@@ -717,9 +717,10 @@ async fn add_server(
             "zhengtang-agent --server {base}/ws/agent --id {agent_id} --key {secret_hex} --fingerprint {fingerprint}"
         ),
         // 短安装命令：面板注入参数，目标机免参数执行。
-        // base 可能是 wss:// 口径（前端为 agent 连接做的转换）；curl 下载必须用 http(s)
+        // base 可能是 wss:// 口径（前端为 agent 连接做的转换）；curl 下载必须用 http(s)。
+        // 用 bash 执行：Ubuntu 的 sh 是 dash，pipefail 等语法不兼容（脚本本身也已 POSIX 化双保险）
         "install_cmd_short": format!(
-            "curl -kfsSL {}/a/{} | sudo sh",
+            "curl -kfsSL {}/a/{} | sudo bash",
             base.replace("wss://", "https://").replace("ws://", "http://"),
             install_token
         ),
