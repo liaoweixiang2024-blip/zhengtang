@@ -3,6 +3,7 @@
 import { useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
 import { Card } from '@/components/ui/card'
 import { fmtCost } from '@/lib/cost'
+import { useSmoothNumber } from '@/lib/use-smooth'
 import { fmtBytes, fmtSpeed, fmtUptime } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -72,7 +73,7 @@ function Meter({ label, pct, foot, empty = '—', icon: Icon }: {
   icon?: ComponentType<{ className?: string; style?: CSSProperties }>
 }) {
   const valid = typeof pct === 'number' && Number.isFinite(pct)
-  const filled = valid ? Math.min(100, Math.max(0, pct)) : 0
+  const filled = useSmoothNumber(valid ? Math.min(100, Math.max(0, pct)) : 0)
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
@@ -99,6 +100,12 @@ function InfoBox({ children, ...rest }: { children: ReactNode } & React.HTMLAttr
       {children}
     </div>
   )
+}
+
+/** 读数盒的单个平滑数值：3s 一跳的速率/总量经缓动滑过去 */
+function Smooth({ value, fmt }: { value: number | null; fmt: (n: number) => string }) {
+  const v = useSmoothNumber(value ?? 0)
+  return <>{value == null ? '—' : fmt(v)}</>
 }
 
 function Stat({ icon: Icon, children, wrap }: {
@@ -182,12 +189,12 @@ export function ServerCard({ server }: { server: ServerView }) {
           {/* 三枚读数盒：速率 / 总量 / 到期（jikasei [data-stats]，窄卡自动让位） */}
           <div data-stats="" className="mt-4 grid gap-2">
             <InfoBox data-stat="speed">
-              <Stat icon={ArrowDown}>{m ? fmtSpeed(m.net_in_speed) : '—'}</Stat>
-              <Stat icon={ArrowUp}>{m ? fmtSpeed(m.net_out_speed) : '—'}</Stat>
+              <Stat icon={ArrowDown}><Smooth value={m ? m.net_in_speed : null} fmt={fmtSpeed} /></Stat>
+              <Stat icon={ArrowUp}><Smooth value={m ? m.net_out_speed : null} fmt={fmtSpeed} /></Stat>
             </InfoBox>
             <InfoBox data-stat="total">
-              <Stat icon={ArrowDown}>{m ? fmtBytes(m.net_in_total) : '—'}</Stat>
-              <Stat icon={ArrowUp}>{m ? fmtBytes(m.net_out_total) : '—'}</Stat>
+              <Stat icon={ArrowDown}><Smooth value={m ? m.net_in_total : null} fmt={fmtBytes} /></Stat>
+              <Stat icon={ArrowUp}><Smooth value={m ? m.net_out_total : null} fmt={fmtBytes} /></Stat>
             </InfoBox>
             <InfoBox data-stat="expiry">
               <Stat icon={CalendarClock} wrap>{expiryText(days).replace(/(\d) 天$/, '$1 天')}</Stat>
