@@ -795,16 +795,28 @@ function scatter(base: [number, number], rank: number, count: number, seed: numb
  *  `nodes` 是该地区的机器清单（侧栏点开地区后逐条展示，点名字直达详情）。 */
 export type RegionRow = { region: Region; count: number; aim: [number, number]; offline: number; nodes: Node[] }
 export function regionRows(nodes: Node[]): RegionRow[] {
+  // ★ 按国家聚合（2026-11-16）：城市机（名字带 LAX 等线索）与国家机并成一行——
+  // 不再出现"洛杉矶"与"美国"并排两行；城市精度仍体现在地球的落点与针上，
+  // 侧栏点开国家行可看每台机器
   const map = new Map<string, RegionRow>()
   for (const node of nodes) {
     const region = regionOf(node)
     if (!region) continue
-    const row = map.get(region.key)
+    const key = region.code || region.key
+    const row = map.get(key)
     if (row) {
       row.count += 1
       row.nodes.push(node)
       if (!node.online) row.offline += 1
-    } else map.set(region.key, { region, count: 1, aim: region.base, offline: node.online ? 0 : 1, nodes: [node] })
+    } else {
+      map.set(key, {
+        region: { ...region, key, city: "", label: COUNTRY_NAME[region.code] ?? region.label, base: COUNTRY_LL[region.code] ?? region.base },
+        count: 1,
+        aim: COUNTRY_LL[region.code] ?? region.base,
+        offline: node.online ? 0 : 1,
+        nodes: [node],
+      })
+    }
   }
   return [...map.values()].sort((a, b) => b.count - a.count || (a.region.key < b.region.key ? -1 : a.region.key > b.region.key ? 1 : 0))
 }

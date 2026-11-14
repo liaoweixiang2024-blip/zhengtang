@@ -265,7 +265,8 @@ function Main(props: {
   // 地球输入（分组后的机器；country 供落针与地区列表）
   const gnodes = filtered.map((s) => ({ id: s.id, name: s.name, online: s.online, country: regionCode(s.region) }))
   const gview = regionView(gnodes, region)
-  const finalList = region == null ? filtered : filtered.filter((_, i) => regionOf(gnodes[i])?.key === region)
+  // 筛选按国家码匹配（城市机的 key 是城市级，region 侧栏现在是国家级）
+  const finalList = region == null ? filtered : filtered.filter((_, i) => { const r = regionOf(gnodes[i]); return r ? r.key === region || (r.code || r.key) === region : false })
   // 顺序 = 面板手动序（后台拖拽调序实时同步到这里；不再按在线/名字本地重排）
   const sorted = finalList
   const hasCountry = gnodes.some((n) => n.country)
