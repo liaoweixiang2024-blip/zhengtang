@@ -278,6 +278,7 @@ function Main(props: {
     <Shell
       siteName={siteName}
       siteLogo={siteLogo}
+      footerText={footerText}
       status={status}
       me={me}
       navigate={navigate}
