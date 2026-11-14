@@ -3,7 +3,7 @@
 import { useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
 import { Card } from '@/components/ui/card'
 import { fmtCost } from '@/lib/cost'
-import { useSmoothNumber } from '@/lib/use-smooth'
+import { SmoothValue } from '@/lib/use-smooth'
 import { fmtBytes, fmtSpeed, fmtUptime } from '@/lib/format'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -73,7 +73,7 @@ function Meter({ label, pct, foot, empty = '—', icon: Icon }: {
   icon?: ComponentType<{ className?: string; style?: CSSProperties }>
 }) {
   const valid = typeof pct === 'number' && Number.isFinite(pct)
-  const filled = useSmoothNumber(valid ? Math.min(100, Math.max(0, pct)) : 0)
+  const filled = valid ? Math.min(100, Math.max(0, pct)) : 0
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
@@ -82,7 +82,7 @@ function Meter({ label, pct, foot, empty = '—', icon: Icon }: {
           <span className="truncate">{label}</span>
         </span>
         <span className="tnum text-xs font-medium">
-          {valid ? `${filled < 10 ? filled.toFixed(1) : filled.toFixed(0)}%` : empty}
+          {valid ? <SmoothValue value={`${filled < 10 ? filled.toFixed(1) : filled.toFixed(0)}%`} /> : empty}
         </span>
       </div>
       <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -102,10 +102,9 @@ function InfoBox({ children, ...rest }: { children: ReactNode } & React.HTMLAttr
   )
 }
 
-/** 读数盒的单个平滑数值：3s 一跳的速率/总量经缓动滑过去 */
+/** 读数盒的单个数值：直接格式化原始值，切换由 SmoothValue 的滑入动画呈现 */
 function Smooth({ value, fmt }: { value: number | null; fmt: (n: number) => string }) {
-  const v = useSmoothNumber(value ?? 0)
-  return <>{value == null ? '—' : fmt(v)}</>
+  return <>{value == null ? '—' : <SmoothValue value={fmt(value)} />}</>
 }
 
 function Stat({ icon: Icon, children, wrap }: {

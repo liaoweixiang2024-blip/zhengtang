@@ -6,7 +6,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { fmtBytes, fmtSpeed } from '@/lib/format'
-import { useSmoothNumber } from '@/lib/use-smooth'
+import { SmoothValue } from '@/lib/use-smooth'
 import { CURRENCY_SYMBOL, costTotalCNY } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -72,7 +72,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
   const busiest = servers
     .filter((s) => s.online && s.metrics)
     .sort((a, b) => (b.metrics!.cpu_usage ?? 0) - (a.metrics!.cpu_usage ?? 0))[0]
-  const busiestCpu = useSmoothNumber(busiest?.metrics?.cpu_usage ?? 0)
+
 
   const sum = (f: (m: NonNullable<ServerView['metrics']>) => number) =>
     servers.reduce((acc, s) => acc + (s.metrics ? f(s.metrics) : 0), 0)
@@ -80,11 +80,6 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
   const totalOut = sum((m) => m.net_out_total)
   const speedIn = sum((m) => m.net_in_speed)
   const speedOut = sum((m) => m.net_out_speed)
-  // 展示用平滑值：3s 一跳的原始数字经 600ms 缓动滑过去（走势线仍用原始值画形状）
-  const smoothTotalIn = useSmoothNumber(totalIn)
-  const smoothTotalOut = useSmoothNumber(totalOut)
-  const smoothSpeedIn = useSmoothNumber(speedIn)
-  const smoothSpeedOut = useSmoothNumber(speedOut)
 
   // 速率采样（模块级缓冲：打开页面至今，≥2s 一点，供走势线）
   if (Date.now() - speedSampledAt > 2000) {
@@ -165,7 +160,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             .slice(0, 10)
             .map((s) => ({ left: s.name, right: `${s.metrics!.cpu_usage.toFixed(1)}%` }))}
         >
-          <Big>{busiest && busiest.metrics ? `${busiestCpu.toFixed(1)}%` : '—'}</Big>
+          <Big>{busiest && busiest.metrics ? <SmoothValue value={`${busiest.metrics.cpu_usage.toFixed(1)}%`} /> : '—'}</Big>
           <Foot>{busiest ? busiest.name : '暂无在线节点'}</Foot>
         </Block>
       </Pair>
@@ -183,7 +178,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             <span className="truncate" title={`出站 ${fmtBytes(today?.out ?? 0)}`}>↑ {fmtBytes(today?.out ?? 0)}</span>
           </div>
           <Foot>
-            总流量 <span className="tabular-nums">↓{fmtBytes(smoothTotalIn)} ↑{fmtBytes(smoothTotalOut)}</span>
+            总流量 <span className="tabular-nums">↓<SmoothValue value={fmtBytes(totalIn)} /> ↑<SmoothValue value={fmtBytes(totalOut)} /></span>
           </Foot>
         </Block>
       </Tile>
@@ -202,8 +197,8 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             }))}
         >
           <div className="mt-1 grid grid-cols-2 gap-x-2 text-2xl font-semibold tracking-tight tabular-nums">
-            <span className="truncate">↓ {fmtSpeed(smoothSpeedIn)}</span>
-            <span className="truncate">↑ {fmtSpeed(smoothSpeedOut)}</span>
+            <span className="truncate">↓ <SmoothValue value={fmtSpeed(speedIn)} /></span>
+            <span className="truncate">↑ <SmoothValue value={fmtSpeed(speedOut)} /></span>
           </div>
           <Foot>
             <Sparkline series={speedHistory} />
