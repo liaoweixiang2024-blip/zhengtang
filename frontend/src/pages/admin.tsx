@@ -1118,6 +1118,9 @@ function EditServerDialog({
   const [resetDay, setResetDay] = useState(server.traffic_reset_day ? String(server.traffic_reset_day) : 'natural')
   const [line, setLine] = useState(server.line ?? '')
   const [bandwidth, setBandwidth] = useState(server.bandwidth_mbps ? String(server.bandwidth_mbps) : '')
+  const [ipv4, setIpv4] = useState(server.ipv4 ?? '')
+  const [ipv6, setIpv6] = useState(server.ipv6 ?? '')
+  const [remark, setRemark] = useState(server.remark ?? '')
   const [payCycle, setPayCycle] = useState(server.pay_cycle_months != null ? String(server.pay_cycle_months) : 'none')
   const [price, setPrice] = useState(server.price_per_cycle != null ? String(server.price_per_cycle) : '')
   const [currency, setCurrency] = useState(server.currency ?? 'CNY')
@@ -1157,6 +1160,9 @@ function EditServerDialog({
       region: region === 'none' ? null : region,
       line: line.trim() || null,
       bandwidth_mbps: bandwidth ? Number(bandwidth) : null,
+      ipv4: ipv4.trim() || null,
+      ipv6: ipv6.trim() || null,
+      remark: remark.trim() || null,
       public_visible: publicVisible,
     }
     const res = await fetch(`/api/admin/servers/${server.id}`, {
@@ -1229,12 +1235,26 @@ function EditServerDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>线路</Label>
-                <Input value={line} onChange={(e) => setLine(e.target.value)} placeholder="CN2 GIA" maxLength={32} />
+                <Input value={line} onChange={(e) => setLine(e.target.value)} placeholder="CN2GIA｜CMIN2｜9929" maxLength={32} />
               </div>
               <div className="space-y-1.5">
                 <Label>带宽 (Mbps)</Label>
                 <Input value={bandwidth} onChange={(e) => setBandwidth(e.target.value.replace(/[^0-9]/g, ''))} placeholder="500" inputMode="numeric" />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>IPv4</Label>
+                <Input value={ipv4} onChange={(e) => setIpv4(e.target.value)} placeholder="留空=自动用连接 IP" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>IPv6</Label>
+                <Input value={ipv6} onChange={(e) => setIpv6(e.target.value)} placeholder="2001:db8::1" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>备注</Label>
+              <Input value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="如 VPS BY DMIT.io" maxLength={128} />
             </div>
           </section>
 

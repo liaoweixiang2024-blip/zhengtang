@@ -54,6 +54,11 @@ pub struct ServerView {
     pub line: Option<String>,
     /// 带宽（Mbps）
     pub bandwidth_mbps: Option<i64>,
+    pub ipv4: Option<String>,
+    pub ipv6: Option<String>,
+    pub remark: Option<String>,
+    /// agent 最近连接 IP（IPv4 展示回退）
+    pub last_ip: Option<String>,
     pub public_visible: bool,
     pub system_info: Option<SystemInfo>,
     pub metrics: Option<RealtimeMetrics>,
@@ -109,6 +114,14 @@ pub struct ServerReg {
     pub line: Option<String>,
     /// 带宽（Mbps）
     pub bandwidth_mbps: Option<i64>,
+    /// 公网 IPv4（手填；空则展示层回退 agent 连接 IP）
+    pub ipv4: Option<String>,
+    /// 公网 IPv6
+    pub ipv6: Option<String>,
+    /// 商家备注（如 VPS BY DMIT.io）
+    pub remark: Option<String>,
+    /// agent 最近连接 IP（IPv4 展示回退）
+    pub last_ip: Option<String>,
 }
 
 pub struct AppState {
@@ -214,7 +227,7 @@ impl AppState {
             .with(|c| {
                 let rows = {
                     let mut stmt = c.prepare(
-                        "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency, region, line, bandwidth_mbps FROM servers ORDER BY sort_order, created_at",
+                        "SELECT id, name, group_id, expires_at, public_visible, traffic_quota_bytes, COALESCE(last_seen_at, 0), purchased_at, traffic_reset_day, pay_cycle_months, price_per_cycle, currency, region, line, bandwidth_mbps, ipv4, ipv6, remark, last_ip FROM servers ORDER BY sort_order, created_at",
                     )?;
                     let collected: Vec<_> = stmt
                         .query_map([], |r| {
@@ -233,6 +246,10 @@ impl AppState {
                                 region: r.get(12)?,
                                 line: r.get(13)?,
                                 bandwidth_mbps: r.get(14)?,
+                                ipv4: r.get(15)?,
+                                ipv6: r.get(16)?,
+                                remark: r.get(17)?,
+                                last_ip: r.get(18)?,
                             }, r.get::<_, i64>(6)?))
                         })?
                         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -273,6 +290,10 @@ impl AppState {
                     region: reg.region,
             line: reg.line,
             bandwidth_mbps: reg.bandwidth_mbps,
+            ipv4: reg.ipv4,
+            ipv6: reg.ipv6,
+            remark: reg.remark,
+            last_ip: reg.last_ip,
                     public_visible: reg.public_visible,
                     system_info: self.system_info.get(&reg.id).map(|s| s.clone()),
                     metrics: self.metrics.get(&reg.id).map(|m| m.clone()),

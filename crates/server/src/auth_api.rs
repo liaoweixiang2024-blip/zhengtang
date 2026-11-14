@@ -842,6 +842,9 @@ struct UpdateServerBody {
     line: Option<Option<String>>,
     /// 带宽 Mbps（null=清除）
     bandwidth_mbps: Option<Option<i64>>,
+    ipv4: Option<Option<String>>,
+    ipv6: Option<Option<String>>,
+    remark: Option<Option<String>>,
     /// 付费周期月数：1/3/12/36/60；0=一次性；-1=免费
     #[serde(default, deserialize_with = "double_option")]
     pay_cycle_months: Option<Option<i64>>,
@@ -909,6 +912,21 @@ async fn update_server(
                 }
             }
             c.execute("UPDATE servers SET bandwidth_mbps = ?1 WHERE id = ?2", rusqlite::params![v, id])?;
+        }
+        for (col, v) in [("ipv4", body.ipv4.clone()), ("ipv6", body.ipv6.clone()), ("remark", body.remark.clone())] {
+            if let Some(v) = v {
+                let v = v.filter(|s| !s.trim().is_empty()).map(|s| s.trim().to_string());
+                if let Some(ref t) = v {
+                    if t.chars().count() > 128 {
+                        anyhow::bail!("{col} ≤128 字符");
+                    }
+                    // IP 字段做基本格式校验（remark 不校验）
+                    if col != "remark" && t.parse::<std::net::IpAddr>().is_err() {
+                        anyhow::bail!("{col} 不是合法 IP 地址");
+                    }
+                }
+                c.execute(&format!("UPDATE servers SET {col} = ?1 WHERE id = ?2"), rusqlite::params![v, id])?;
+            }
         }
         if let Some(rd) = body.traffic_reset_day {
             // 合法值：1-31（29/30/31 在不足的月份按当月最后一天）、99=每月月末、NULL=自然月

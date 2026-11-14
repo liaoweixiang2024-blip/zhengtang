@@ -21,6 +21,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ("009_sort_order", include_str!("../migrations/009_sort_order.sql")),
     ("010_notify_enabled", include_str!("../migrations/010_notify_enabled.sql")),
     ("011_line_bandwidth", include_str!("../migrations/011_line_bandwidth.sql")),
+    ("012_server_info", include_str!("../migrations/012_server_info.sql")),
 ];
 
 pub struct Store {
