@@ -160,7 +160,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             .slice(0, 10)
             .map((s) => ({ left: s.name, right: `${s.metrics!.cpu_usage.toFixed(1)}%` }))}
         >
-          <Big>{busiest && busiest.metrics ? <SmoothValue value={`${busiest.metrics.cpu_usage.toFixed(1)}%`} /> : '—'}</Big>
+          <Big>{busiest && busiest.metrics ? <SmoothValue value={`${busiest.metrics.cpu_usage.toFixed(1)}%`} min="min-w-[5ch]" /> : '—'}</Big>
           <Foot>{busiest ? busiest.name : '暂无在线节点'}</Foot>
         </Block>
       </Pair>
@@ -178,7 +178,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             <span className="truncate" title={`出站 ${fmtBytes(today?.out ?? 0)}`}>↑ {fmtBytes(today?.out ?? 0)}</span>
           </div>
           <Foot>
-            总流量 <span className="tabular-nums">↓<SmoothValue value={fmtBytes(totalIn)} /> ↑<SmoothValue value={fmtBytes(totalOut)} /></span>
+            总流量 <span className="tabular-nums">↓<SmoothValue value={fmtBytes(totalIn)} min="min-w-[7ch]" /> ↑<SmoothValue value={fmtBytes(totalOut)} min="min-w-[7ch]" /></span>
           </Foot>
         </Block>
       </Tile>
@@ -197,8 +197,8 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             }))}
         >
           <div className="mt-1 grid grid-cols-2 gap-x-2 text-2xl font-semibold tracking-tight tabular-nums">
-            <span className="truncate">↓ <SmoothValue value={fmtSpeed(speedIn)} /></span>
-            <span className="truncate">↑ <SmoothValue value={fmtSpeed(speedOut)} /></span>
+            <span className="truncate">↓ <SmoothValue value={fmtSpeed(speedIn)} min="min-w-[8ch]" /></span>
+            <span className="truncate">↑ <SmoothValue value={fmtSpeed(speedOut)} min="min-w-[8ch]" /></span>
           </div>
           <Foot>
             <Sparkline series={speedHistory} />
