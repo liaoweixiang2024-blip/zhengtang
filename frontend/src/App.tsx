@@ -266,7 +266,8 @@ function Main(props: {
   const gnodes = filtered.map((s) => ({ id: s.id, name: s.name, online: s.online, country: regionCode(s.region) }))
   const gview = regionView(gnodes, region)
   const finalList = region == null ? filtered : filtered.filter((_, i) => regionOf(gnodes[i])?.key === region)
-  const sorted = [...finalList].sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
+  // 顺序 = 面板手动序（后台拖拽调序实时同步到这里；不再按在线/名字本地重排）
+  const sorted = finalList
   const hasCountry = gnodes.some((n) => n.country)
 
   return (
