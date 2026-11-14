@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { fmtBytes } from '@/lib/format'
 import { CYCLE_LABEL, CURRENCY_SYMBOL, fmtCost, monthlyCostByCurrency } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
-import { Bell, ListTree, Pencil, Plus, Radar, RefreshCw, ScrollText, Server, Settings, Trash2, Users, FolderGit2, KeyRound } from 'lucide-react'
+import { Bell, Info, ListTree, Pencil, Plus, Radar, ScrollText, Server, Settings, Trash2, Users, FolderGit2, KeyRound } from 'lucide-react'
 
 interface Group { id: number; name: string }
 interface User { id: number; username: string; role: string; totp_enabled: boolean }
@@ -22,13 +22,13 @@ interface AuditLog { id: number; user: string | null; action: string; detail: st
 
 // 侧边导航（顶栏用户菜单也复用这份清单）
 export const NAV = [
-  { key: 'servers', label: '服务器', icon: Server },
+  { key: 'servers', label: '主机', icon: Server },
   { key: 'groups', label: '分组', icon: FolderGit2 },
   { key: 'users', label: '用户', icon: Users },
-  { key: 'audit', label: '审计日志', icon: ScrollText },
-  { key: 'alerts', label: '告警中心', icon: Bell },
+  { key: 'audit', label: '审计', icon: ScrollText },
+  { key: 'alerts', label: '告警', icon: Bell },
   { key: 'settings', label: '设置', icon: Settings },
-  { key: 'update', label: '在线更新', icon: RefreshCw },
+  { key: 'update', label: '关于', icon: Info },
 ] as const
 
 export type NavKey = (typeof NAV)[number]['key']
@@ -708,7 +708,6 @@ function SettingsTab() {
   const [logoBusy, setLogoBusy] = useState(false)
   const [publicEnabled, setPublicEnabled] = useState(true)
   const [globeEnabled, setGlobeEnabled] = useState(true)
-  const [updateBase, setUpdateBase] = useState('')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [loaded, setLoaded] = useState(false)
@@ -724,7 +723,6 @@ function SettingsTab() {
         setLogo(d.site_logo ?? '')
         setPublicEnabled(d.public_page_enabled !== false)
         setGlobeEnabled(d.globe_enabled !== false)
-        setUpdateBase(d.update_base ?? '')
         setLoaded(true)
       })
   }, [])
@@ -769,7 +767,6 @@ function SettingsTab() {
         site_description: description,
         public_page_enabled: publicEnabled,
         globe_enabled: globeEnabled,
-        update_base: updateBase.trim(),
       }),
     })
     if (!res.ok) {
@@ -853,18 +850,6 @@ function SettingsTab() {
             </div>
             <Switch checked={publicEnabled} onCheckedChange={setPublicEnabled} />
           </div>
-          <div className="space-y-2">
-            <Label>在线更新源</Label>
-            <Input
-              value={updateBase}
-              onChange={(e) => setUpdateBase(e.target.value)}
-              placeholder="留空 = GitHub 官方 releases"
-            />
-            <p className="text-xs text-muted-foreground">
-              「在线更新」页的下载地址。GitHub 直连不稳时可填镜像前缀，如
-              https://ghfast.top/https://github.com/liaoweixiang2024-blip/zhengtang/releases
-            </p>
-          </div>
           {/* 状态行恒占一行高：提示出现/消失不把按钮顶得跳动 */}
           <div className="flex min-h-5 items-center text-sm">
             {error ? (
@@ -881,7 +866,7 @@ function SettingsTab() {
 }
 
 
-// ---------- 在线更新 ----------
+// ---------- 关于（版本 + 在线更新 + 更新源） ----------
 
 function UpdateTab() {
   const [info, setInfo] = useState<{ current: string; latest: string | null; target: string | null; base: string } | null>(null)
@@ -890,6 +875,9 @@ function UpdateTab() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  // 更新源（原在站点设置；GitHub 直连不稳的国内环境在这里改镜像前缀）
+  const [updateBase, setUpdateBase] = useState('')
+  const [baseSaved, setBaseSaved] = useState(false)
 
   const check = useCallback(async () => {
     setChecking(true)
@@ -905,6 +893,32 @@ function UpdateTab() {
     if (d.latest) setVersion(d.latest)
   }, [])
   useEffect(() => { check() }, [check])
+  // check 顺带带回当前 update_base，填进输入框
+  useEffect(() => {
+    if (info?.base) setUpdateBase(info.base)
+  }, [info?.base])
+
+  const saveBase = async () => {
+    const v = updateBase.trim()
+    if (v && !v.startsWith('https://') && !v.startsWith('http://')) {
+      setError('更新源必须以 http(s):// 开头')
+      return
+    }
+    setError('')
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ update_base: v }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setError(d.error ?? '保存失败')
+      return
+    }
+    setBaseSaved(true)
+    setTimeout(() => setBaseSaved(false), 2000)
+    check()
+  }
 
   const run = async () => {
     setBusy(true)
@@ -945,7 +959,7 @@ function UpdateTab() {
   const hasNew = info?.latest && `v${info.current}` !== info.latest
   return (
     <Card className="py-4">
-      <CardHeader><CardTitle className="text-base">在线更新</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base">关于</CardTitle></CardHeader>
       <CardContent className="max-w-lg space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-lg border border-border p-3">
@@ -979,9 +993,7 @@ function UpdateTab() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            更新源：{info?.base ?? '…'}
-            <br />
-            GitHub 直连不稳时，到「设置」把更新源换成镜像前缀（如 ghfast.top）
+            当前更新源：{info?.base ?? '…'}（在本页下方修改）
           </p>
         </div>
 
@@ -1002,6 +1014,25 @@ function UpdateTab() {
           更新流程：下载 release 包 → sha256 校验 → 原子替换二进制 → 无缝热切换（进程不重启、数据不丢）；
           失败时旧版本继续运行。
         </p>
+
+        <div className="space-y-2 border-t border-border pt-4">
+          <Label>更新源</Label>
+          <div className="flex gap-2">
+            <Input
+              value={updateBase}
+              onChange={(e) => setUpdateBase(e.target.value)}
+              placeholder="留空 = GitHub 官方 releases"
+              className="min-w-0"
+            />
+            <Button type="button" variant="outline" onClick={saveBase}>
+              {baseSaved ? '✓ 已保存' : '保存'}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            在线更新的下载地址。GitHub 直连不稳时可填镜像前缀，如
+            https://ghfast.top/https://github.com/liaoweixiang2024-blip/zhengtang/releases
+          </p>
+        </div>
       </CardContent>
     </Card>
   )
