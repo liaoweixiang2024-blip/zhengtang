@@ -13,10 +13,16 @@
   src: url('/fonts/geist-latin-wght-normal.woff2') format('woff2-variations');
 }
 
-/* 滚动条槽位恒定预留：前台短页无滚动条、后台长页有滚动条时，居中的 1280 容器
-   不再被滚动条挤出十几像素（前后台切换"从右往左平移"的根源）。 */
+/* 页面主滚动条隐藏：前台内容长会出现右侧滚动条、后台短页没有——两边观感
+   不一致，统一都不显示（滚轮/触摸滚动不受影响；地球地区列表等局部小滚动区
+   保留自己的细条不受影响）。隐藏后滚动条宽为 0，前后台切换也不会再平移，
+   原先为此加的 scrollbar-gutter 槽位随之自然失效，保留作极端环境兜底。 */
 html {
+  scrollbar-width: none; /* Firefox */
   scrollbar-gutter: stable;
+}
+html::-webkit-scrollbar {
+  display: none; /* Chrome / Safari / Edge */
 }
 
 @custom-variant dark (&:is(.dark *));
