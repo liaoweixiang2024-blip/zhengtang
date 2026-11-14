@@ -57,7 +57,10 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
+  // popper（而非 item-aligned）：长列表打开时 item-aligned 会滚动对齐到选中项、
+  // 点选瞬间内容重新定位，靠后的选项容易点空（流量重置日 33 项实测选不上 29/30/31）。
+  // popper 让弹层稳定挂在触发器下方，宽度跟随触发器
+  position = "popper",
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
