@@ -102,9 +102,12 @@ mod tests {
 
     #[test]
     fn target_triple_present() {
-        // CI 支持的四个平台在对应机器上必须能取到（None 则在线更新不可用）
-        if cfg!(any(target_os = "linux", target_os = "macos")) {
+        // 发布目标是 musl-linux 与 macOS；CI 的 test job 跑在 linux-gnu（开发口径）
+        // ——按设计返回 None（不支持在线更新，避免下载错包），两边都验证到
+        if cfg!(target_os = "macos") || (cfg!(target_os = "linux") && cfg!(target_env = "musl")) {
             assert!(build_target().is_some(), "release 目标平台必须支持在线更新");
+        } else {
+            assert!(build_target().is_none(), "非发布目标应返回 None 而非匹配到错误三元组");
         }
     }
 }
