@@ -15,10 +15,9 @@ import { CardStyleMenu } from '@/components/card-style-menu'
 import { SearchBox } from '@/components/search-box'
 import { ThemeToggle } from '@/components/theme-toggle'
 import type { ViewMode } from '@/components/dashboard-header'
-import { NAV } from '@/pages/admin'
 import type { Me } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { Bell, KeyRound, LogOut, UserRound } from 'lucide-react'
+import { Bell, KeyRound, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
 
 export function TopBar(props: {
   siteName: string
@@ -106,19 +105,17 @@ export function UserMenu({
             <KeyRound />
             修改密码
           </DropdownMenuItem>
-          {!admin && (
+          {admin ? (
+            <DropdownMenuItem onClick={() => navigate('/admin')}>
+              <LayoutDashboard />
+              后台管理
+            </DropdownMenuItem>
+          ) : (
             <DropdownMenuItem onClick={() => navigate('/alerts')}>
               <Bell />
               告警中心
             </DropdownMenuItem>
           )}
-          {admin &&
-            NAV.filter((n) => n.key !== 'update').map(({ key, label, icon: Icon }) => (
-              <DropdownMenuItem key={key} onClick={() => navigate(`/admin?tab=${key}`)}>
-                <Icon />
-                {label}
-              </DropdownMenuItem>
-            ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={onLogout}>
             <LogOut />
