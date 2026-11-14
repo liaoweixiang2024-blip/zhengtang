@@ -197,8 +197,8 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             }))}
         >
           <div className="mt-1 grid grid-cols-2 gap-x-2 text-2xl font-semibold tracking-tight tabular-nums">
-            <span className="truncate">↓ <SmoothValue value={fmtSpeed(speedIn)} min="min-w-[8ch]" /></span>
-            <span className="truncate">↑ <SmoothValue value={fmtSpeed(speedOut)} min="min-w-[8ch]" /></span>
+            <span className="truncate">↓ <SmoothValue value={fmtSpeed(speedIn)} /></span>
+            <span className="truncate">↑ <SmoothValue value={fmtSpeed(speedOut)} /></span>
           </div>
           <Foot>
             <Sparkline series={speedHistory} />
