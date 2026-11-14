@@ -15,8 +15,10 @@ export function ServerTable({ servers, onOpen }: { servers: ServerView[]; onOpen
           <TableRow>
             <TableHead className="w-8"></TableHead>
             <TableHead>名称</TableHead>
-            <TableHead className="text-right">CPU</TableHead>
-            <TableHead className="text-right">内存</TableHead>
+            {/* 手机只留：名称 + 网速（↓↑ 合并一格）+ 到期——全部可见，不用横向划 */}
+            <TableHead className="text-right sm:hidden">网速</TableHead>
+            <TableHead className="hidden text-right sm:table-cell">CPU</TableHead>
+            <TableHead className="hidden text-right sm:table-cell">内存</TableHead>
             <TableHead className="text-right hidden sm:table-cell">下载</TableHead>
             <TableHead className="text-right hidden sm:table-cell">上传</TableHead>
             <TableHead className="text-right hidden md:table-cell">在线时长</TableHead>
@@ -37,11 +39,18 @@ export function ServerTable({ servers, onOpen }: { servers: ServerView[]; onOpen
                     )}
                   />
                 </TableCell>
-                <TableCell className="font-medium">{s.name}</TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell className="min-w-0 max-w-[40vw] truncate font-medium sm:max-w-none">{s.name}</TableCell>
+                <TableCell className="whitespace-nowrap text-right text-[11px] tabular-nums text-muted-foreground sm:hidden">
+                  {m ? (
+                    <>↓{fmtSpeed(m.net_in_speed)} ↑{fmtSpeed(m.net_out_speed)}</>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell className="hidden text-right tabular-nums sm:table-cell">
                   {m ? fmtPercent(m.cpu_usage, 0) : '—'}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell className="hidden text-right tabular-nums sm:table-cell">
                   {m ? fmtPercent(memPct, 0) : '—'}
                 </TableCell>
                 <TableCell className="hidden text-right tabular-nums sm:table-cell">
@@ -53,7 +62,7 @@ export function ServerTable({ servers, onOpen }: { servers: ServerView[]; onOpen
                 <TableCell className="hidden text-right text-muted-foreground md:table-cell">
                   {m ? fmtUptime(m.uptime_secs) : '—'}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="whitespace-nowrap text-right">
                   <ExpiresCell expiresAt={s.expires_at} />
                 </TableCell>
               </TableRow>
