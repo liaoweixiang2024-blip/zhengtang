@@ -101,6 +101,10 @@ export function Globe({ nodes, dark, region, onRegion, onOpen, onWarm }: {
     id: number; x: number; y: number; lon: number; lat: number; moved: boolean
     /** pointerdown 那一刻压在谁身上（见 endDrag 的注释：click 的 target 不能再信）。 */
     pressed: string | null
+    /** 多台地区的针：region key / 台数 / 落点（点击=选中该地区展开清单） */
+    pressedRegion: string | null
+    pressedCount: number
+    pressedAim: string | null
   } | null>(null)
 
   useEffect(() => {
@@ -156,6 +160,10 @@ export function Globe({ nodes, dark, region, onRegion, onOpen, onWarm }: {
     drag.current = {
       id: e.pointerId, x: e.clientX, y: e.clientY, lon: view.lon, lat: view.lat, moved: false,
       pressed: pressed ? pressed.getAttribute("data-node") : null,
+      // 多台地区的针：点击改为"选中该地区"（侧栏展开机器清单），分流信息一并记下
+      pressedRegion: pressed?.getAttribute("data-region") ?? null,
+      pressedCount: Number(pressed?.getAttribute("data-count") ?? 1),
+      pressedAim: pressed?.getAttribute("data-aim") ?? null,
     }
     setDragging(true)
     try {
@@ -185,10 +193,16 @@ export function Globe({ nodes, dark, region, onRegion, onOpen, onWarm }: {
   const endDrag = (e: React.PointerEvent<HTMLDivElement>, open: boolean) => {
     const d = drag.current
     if (!d || e.pointerId !== d.id) return
-    // 没拖（3px 以内）且按在一枚针上：这才是"点开那台机器"。
+    // 没拖（3px 以内）且按在一枚针上：单台 = 打开这台；多台地区 = 选中该地区
+    // （侧栏就地展开机器清单，一台台点）——不再"只打开其中第一台"。
     if (open && !d.moved && d.pressed !== null) {
       onWarm()
-      onOpen(d.pressed)
+      if (d.pressedCount > 1 && d.pressedRegion) {
+        const aim = d.pressedAim?.split(",").map(Number) as [number, number] | undefined
+        pick(d.pressedRegion, aim && aim.length === 2 ? aim : undefined)
+      } else {
+        onOpen(d.pressed)
+      }
     }
     drag.current = null
     setDragging(false)
@@ -418,7 +432,7 @@ function Pin({ p, onOpen, onWarm }: { p: Placed; onOpen: (id: string) => void; o
       {/* 悬停提示挂在**整组**上：悬到针、引线、标签哪儿都显示（文案只留这一份）。
           ★ 别挂进 <text> 里面 —— SVG 的 textContent 会把 <title> 的文本也串进来，
           按文本匹配标签的断言（「截成省略号」那类）会当场假红。 */}
-      <title>{p.count > 1 ? `${p.region.label}：${p.count} 台（打开其中第一台）` : `打开 ${p.name}`}</title>
+      <title>{p.count > 1 ? `${p.region.label}：${p.count} 台（点击展开机器清单）` : `打开 ${p.name}`}</title>
       {!p.hidden && (
         <path className="globe-stem" d={`M ${cx} ${cy} L ${p.lx.toFixed(1)} ${p.ly.toFixed(1)}`} />
       )}
@@ -433,7 +447,7 @@ function Pin({ p, onOpen, onWarm }: { p: Placed; onOpen: (id: string) => void; o
       {!p.hidden && (
         /* 这行名字本身也能点：点了打开它对应的那台机器（多台地区 = 打开其中第一台）。
            与命中圆共用一个事件路径 —— pointerdown 那一刻用 closest('[data-node]') 认下它是谁。 */
-        <text className="globe-label" x={p.lx + (p.end ? -3 : 3)} y={p.ly + 3} textAnchor={p.end ? "end" : "start"} data-node={p.id} aria-hidden="true">
+        <text className="globe-label" x={p.lx + (p.end ? -3 : 3)} y={p.ly + 3} textAnchor={p.end ? "end" : "start"} data-node={p.id} data-region={p.region.key} data-count={p.count} data-aim={`${p.region.base[0]},${p.region.base[1]}`} aria-hidden="true">
           {p.label}
         </text>
       )}
@@ -448,9 +462,10 @@ function Pin({ p, onOpen, onWarm }: { p: Placed; onOpen: (id: string) => void; o
         data-region={p.region.key}
         data-online={p.online ? "1" : "0"}
         data-count={p.count}
+        data-aim={`${p.region.base[0]},${p.region.base[1]}`}
         tabIndex={0}
         role="button"
-        aria-label={p.count > 1 ? `${p.region.label}：${p.count} 台，打开其中第一台` : `打开 ${p.name}`}
+        aria-label={p.count > 1 ? `${p.region.label}：${p.count} 台，点击展开机器清单` : `打开 ${p.name}`}
         onFocus={onWarm}
         onPointerOver={onWarm}
         onKeyDown={(e) => {
