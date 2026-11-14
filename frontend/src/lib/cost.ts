@@ -38,3 +38,29 @@ export function remainingValueByCurrency(servers: ServerView[]): { currency: str
   }
   return [...map.entries()].map(([currency, value]) => ({ currency, value }))
 }
+
+/** 折人民币近似汇率（显示口径用，非结算；2026-11 手动维护，量级对即可） */
+export const EXCHANGE_TO_CNY: Record<string, number> = {
+  CNY: 1, USD: 7.2, EUR: 7.8, HKD: 0.92, JPY: 0.047, GBP: 9.1,
+}
+
+/** 任意金额折人民币（未知货币按 1 处理并在构成里可见） */
+export function toCNY(amount: number, currency: string | null | undefined): number {
+  return amount * (EXCHANGE_TO_CNY[currency ?? 'CNY'] ?? 1)
+}
+
+/** 概览口径：全货币折 CNY 合计 + 各货币构成（脚注展示"¥x + $y 折合"） */
+export function costTotalCNY(
+  servers: ServerView[],
+  valueOf: (s: ServerView) => number | null,
+): { total: number; parts: { currency: string; amount: number }[] } {
+  const map = new Map<string, number>()
+  for (const s of servers) {
+    const v = valueOf(s)
+    if (v == null || v <= 0) continue
+    const cur = s.currency ?? 'CNY'
+    map.set(cur, (map.get(cur) ?? 0) + v)
+  }
+  const parts = [...map.entries()].map(([currency, amount]) => ({ currency, amount }))
+  return { total: parts.reduce((acc, p) => acc + toCNY(p.amount, p.currency), 0), parts }
+}

@@ -6,7 +6,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { fmtBytes, fmtSpeed } from '@/lib/format'
-import { CURRENCY_SYMBOL, monthlyCostByCurrency, remainingValueByCurrency } from '@/lib/cost'
+import { CURRENCY_SYMBOL, costTotalCNY } from '@/lib/cost'
 import type { ServerView } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { AlignJustify, Check, GalleryVerticalEnd, Grid2x2 } from 'lucide-react'
@@ -45,13 +45,27 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
   const online = servers.filter((s) => s.online).length
   const offline = total - online
 
-  // 月度预算 / 剩余价值（取合计最大的货币为主货币）
-  const budgets = monthlyCostByCurrency(servers)
-  const budget = budgets.sort((a, b) => b.monthly - a.monthly)[0]
-  const values = remainingValueByCurrency(servers)
-  const remain = values.find((v) => v.currency === budget?.currency) ?? values.sort((a, b) => b.value - a.value)[0]
+  // 月度预算 / 剩余价值：全货币折人民币合计（不再只挑合计最大的一种货币，
+  // 美元机与人民币机混编时数字才是真合计）；各币构成进脚注
+  const now0 = Date.now() / 1000
+  const budget = costTotalCNY(servers, (s) =>
+    s.price_per_cycle != null && s.pay_cycle_months && s.pay_cycle_months > 0
+      ? s.price_per_cycle / s.pay_cycle_months
+      : null)
+  const remain = costTotalCNY(servers, (s) => {
+    if (s.price_per_cycle == null || !s.pay_cycle_months || s.pay_cycle_months <= 0) return null
+    if (!s.expires_at || s.expires_at <= now0) return null
+    return ((s.price_per_cycle / s.pay_cycle_months) * (s.expires_at - now0)) / 86400 / 30.44
+  })
+  // 脚注构成："¥xx + $yy 折合"（单币种时只显示一个）
+  const partsText = (parts: { currency: string; amount: number }[]) =>
+    parts
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 2)
+      .map((p) => `${CURRENCY_SYMBOL[p.currency] ?? p.currency}${p.amount.toFixed(p.amount >= 100 ? 0 : 1)}`)
+      .join(' + ') + (parts.length > 2 ? ' …' : '')
   const billed = servers.filter((s) => s.price_per_cycle != null && s.pay_cycle_months && s.pay_cycle_months > 0).length
-  const unexpired = servers.filter((s) => s.expires_at && s.expires_at > Date.now() / 1000).length
+  const unexpired = servers.filter((s) => s.expires_at && s.expires_at > now0).length
 
   // 最忙节点 = 在线机器中 CPU 最高
   const busiest = servers
@@ -72,8 +86,7 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
     if (speedHistory.length > 240) speedHistory.shift()
   }
 
-  const sym = budget ? CURRENCY_SYMBOL[budget.currency] ?? budget.currency : ''
-  const nowSec = Date.now() / 1000
+  const nowSec = now0
   const r2 = (n: number) => n.toFixed(2)
 
   return (
@@ -90,8 +103,12 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
               right: `${CURRENCY_SYMBOL[s.currency ?? 'CNY'] ?? ''}${r2(s.price_per_cycle! / s.pay_cycle_months!)}/月`,
             }))}
         >
-          <Big>{budget ? `≈${sym}${budget.monthly.toFixed(2)}` : '—'}</Big>
-          <Foot>{budget ? `${billed} 台计费` : '暂无计费信息'}</Foot>
+          <Big>{budget.total > 0 ? `≈¥${budget.total.toFixed(2)}` : '—'}</Big>
+          <Foot>
+            {budget.parts.length > 0
+              ? `${billed} 台计费 · ${budget.parts.length > 1 ? partsText(budget.parts) + ' 折合' : '人民币'}`
+              : '暂无计费信息'}
+          </Foot>
         </Block>
         <Block
           align="right"
@@ -108,8 +125,12 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
               }
             })}
         >
-          <Big>{remain && remain.value > 0 ? `≈${CURRENCY_SYMBOL[remain.currency] ?? remain.currency}${remain.value.toFixed(2)}` : '—'}</Big>
-          <Foot>{remain && remain.value > 0 ? `${unexpired} 台未到期` : '暂无到期机器'}</Foot>
+          <Big>{remain.total > 0 ? `≈¥${remain.total.toFixed(2)}` : '—'}</Big>
+          <Foot>
+            {remain.parts.length > 0
+              ? `${unexpired} 台未到期${remain.parts.length > 1 ? ` · ${partsText(remain.parts)} 折合` : ''}`
+              : '暂无到期机器'}
+          </Foot>
         </Block>
       </Pair>
 
