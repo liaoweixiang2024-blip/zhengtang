@@ -239,20 +239,16 @@ function Block({
   const hasRows = !!rows?.length
   const enter = () => {
     if (!hasRows) return
-    const r = ref.current?.getBoundingClientRect()
-    if (r) {
-      // 面板宽度跟随触发块（下限 232 保证明细放得下，上限 340），与块边缘严格对齐——
-      // 视觉上是"从这块拉出来的抽屉"，而不是飘在页面某处的一个框
-      const width = Math.min(340, Math.max(232, Math.ceil(r.width)))
-      const top = r.bottom
-      // top 贴住块底（零间隙）：容器把视觉间距吃进自身 padding，
-      // 鼠标从块移进面板全程都在悬停区内，不会中途触发关闭
-      if (align === 'right') {
-        setSpot({ top, right: Math.max(8, window.innerWidth - r.right), width })
-      } else {
-        // 左对齐块左缘；贴近视口右缘时向左让，别溢出屏幕
-        setSpot({ top, left: Math.min(r.left, window.innerWidth - width - 8), width })
-      }
+    const el = ref.current
+    const r = el?.getBoundingClientRect()
+    // 宽度对齐**整张卡**（块所在的 Card，如"月度预算|剩余价值"一整张）：
+    // 面板看起来是卡片向下展开的一段，而不是挂在某块上的小浮层
+    const card = el?.closest('[data-slot="card"]')?.getBoundingClientRect()
+    if (r && card) {
+      const width = Math.ceil(card.width)
+      setSpot({ top: r.bottom, left: Math.max(8, Math.min(card.left, window.innerWidth - width - 8)), width })
+    } else if (r) {
+      setSpot({ top: r.bottom, left: r.left, width: Math.min(340, Math.max(232, Math.ceil(r.width))) })
     }
     setOpen(true)
   }
@@ -271,11 +267,12 @@ function Block({
         createPortal(
           <div
             style={{ position: 'fixed', top: spot.top, width: spot.width, ...(spot.left != null ? { left: spot.left } : { right: spot.right }) }}
-            className="z-[70] pt-1.5"
+            className="z-[70]"
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
           >
-            <div className="max-h-64 animate-in fade-in-0 slide-in-from-top-1 overflow-y-auto rounded-xl border border-border/80 bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/5 duration-150">
+            {/* 顶角直角 + 去上边框：贴住块底时像卡片向下"加载"出的一段，不是贴上去的浮层 */}
+            <div className="max-h-64 animate-in fade-in-0 slide-in-from-top-1 overflow-y-auto rounded-b-xl border border-t-0 border-border/80 bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/5 duration-150">
               <div className="flex items-baseline justify-between gap-2 px-2 pb-1 pt-1">
                 <span className="text-xs font-medium">{title}</span>
                 <span className="text-[10px] text-muted-foreground">每机明细 · {rows!.length}</span>
