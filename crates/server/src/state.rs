@@ -12,6 +12,10 @@ use crate::store::{unix_now, Store};
 
 /// 一台已连接 agent 的实时状态。
 pub struct LiveAgent {
+    /// 连接代次（每条 WS 连接唯一，全局递增）。离线清理时校验：
+    /// 只有 live 里仍是本连接的条目才允许删除/广播离线——
+    /// 防止旧连接退出时误删重连后新连接刚登记的在线状态
+    pub token: u64,
     pub connected_at: Instant,
     pub last_metrics_at: Instant,
     pub last_seen: Instant,

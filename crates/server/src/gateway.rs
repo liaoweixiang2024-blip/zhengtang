@@ -7,6 +7,7 @@
 //! - Server→Agent 的消息集合见 proto::ServerMsg（穷举、只读）
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use axum::extract::ws::{Message, WebSocket};
@@ -52,6 +53,9 @@ pub async fn ws_agent_handler(
         .on_upgrade(move |socket| handle_socket(state, socket, ip))
 }
 
+/// 连接代次计数器：每条 agent 连接领取唯一 token，离线清理时凭 token 认领 live 条目。
+static CONN_SEQ: AtomicU64 = AtomicU64::new(1);
+
 async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket, peer_ip: String) {
     // 1. 下发一次性 challenge
     let mut challenge = [0u8; 32];
@@ -76,17 +80,23 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket, peer_ip: Str
     // 3. 注册实时状态并回 HelloOk（上线即落 last_ip，不等 60s 定时器；
     //    last_ip 仅存库，地区一律手动选择——不按 IP 外部查询）
     state.persist_agent_seen(&agent_id, &peer_ip);
+    let token = CONN_SEQ.fetch_add(1, Ordering::Relaxed);
     let now = Instant::now();
     state.live.insert(
         agent_id.clone(),
-        crate::state::LiveAgent { connected_at: now, last_metrics_at: now, last_seen: now },
+        crate::state::LiveAgent {
+            token,
+            connected_at: now,
+            last_metrics_at: now,
+            last_seen: now,
+        },
     );
     let ok = ServerMsg::HelloOk {
         metrics_interval_secs: state.metrics_interval_secs,
         server_time: unix_now() as u64,
     };
     if send_proto(&mut socket, &ok).await.is_err() {
-        state.live.remove(&agent_id);
+        remove_live_if_current(&state, &agent_id, token);
         return;
     }
     if let Some(view) = state.server_view(&agent_id) {
@@ -95,7 +105,8 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket, peer_ip: Str
 
     // 注册命令下发通道 + 立即下发当前拨测任务/进程规则
     let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<ServerMsg>();
-    state.agent_cmds.insert(agent_id.clone(), cmd_tx);
+    // 留一份本连接的 sender，离线清理时凭 same_channel 校验归属再删
+    state.agent_cmds.insert(agent_id.clone(), cmd_tx.clone());
     let tasks = state.dial_tasks(&agent_id);
     if send_proto(&mut socket, &ServerMsg::DialTasks(tasks)).await.is_err() {
         tracing::debug!(agent = %agent_id, "初始拨测任务发送失败（连接即将关闭）");
@@ -142,9 +153,22 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket, peer_ip: Str
                 break;
             }
             AgentMsg::Metrics(m) => {
-                // 速率限制：≥1s 一条
+                // 速率限制：≥1s 一条。live 条目缺失时自愈补登记——
+                // metrics 能到达即本连接活着（条目缺失只可能来自历史竞态/异常），
+                // 补上后随后的 Update 广播会把面板从假掉线拉回在线
                 let mut needs_broadcast = false;
-                if let Some(mut live) = state.live.get_mut(&agent_id) {
+                {
+                    let mut live = state.live.entry(agent_id.clone()).or_insert_with(|| {
+                        tracing::warn!(agent = %agent_id, "live 条目缺失，metrics 到达自愈补登记");
+                        let now = Instant::now();
+                        crate::state::LiveAgent {
+                            token,
+                            connected_at: now,
+                            // 预减 1s：首条立即通过限流并广播恢复
+                            last_metrics_at: now - Duration::from_secs(1),
+                            last_seen: now,
+                        }
+                    });
                     if live.last_metrics_at.elapsed() >= Duration::from_secs(1) {
                         live.last_metrics_at = Instant::now();
                         live.last_seen = Instant::now();
@@ -185,12 +209,32 @@ async fn handle_socket(state: Arc<AppState>, mut socket: WebSocket, peer_ip: Str
         }
     }
 
-    // 5. 离线清理
-    state.agent_cmds.remove(&agent_id);
-    state.live.remove(&agent_id);
+    // 5. 离线清理：同一 agent 快速重连时新旧连接会短暂并存（半开连接下，
+    //    服务端感知断开可能晚于 agent 重连成功）。只有 live 条目仍是本连接
+    //    的 token 时才移除并广播离线——否则会误删新连接刚登记的在线状态，
+    //    造成面板假掉线且不自愈（新连接的 metrics 全被静默丢弃）
+    state
+        .agent_cmds
+        .remove_if(&agent_id, |_, tx| tx.same_channel(&cmd_tx));
+    let was_current = remove_live_if_current(&state, &agent_id, token);
     state.persist_agent_seen(&agent_id, &peer_ip);
-    tracing::info!(agent = %agent_id, "agent 离线");
-    let _ = state.dash_tx.send(DashboardEvent::Offline { id: agent_id });
+    if was_current {
+        tracing::info!(agent = %agent_id, "agent 离线");
+        let _ = state.dash_tx.send(DashboardEvent::Offline { id: agent_id });
+    }
+}
+
+/// 仅当 live 中仍是本连接（token 匹配）的条目时移除；返回是否移除。
+/// 未移除且条目仍在 = agent 已重连、新连接接管了 live，本连接静默退出。
+fn remove_live_if_current(state: &AppState, agent_id: &str, token: u64) -> bool {
+    let removed = state
+        .live
+        .remove_if(agent_id, |_, v| v.token == token)
+        .is_some();
+    if !removed && state.live.contains_key(agent_id) {
+        tracing::info!(agent = %agent_id, "旧连接退出，live 已由重连的新连接接管");
+    }
+    removed
 }
 
 /// 校验 Hello；成功返回 agent_id。
