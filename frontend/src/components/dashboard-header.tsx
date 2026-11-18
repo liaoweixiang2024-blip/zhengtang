@@ -172,8 +172,8 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             .map((r) => ({ left: r.name, right: `↓${fmtBytes(r.in)} ↑${fmtBytes(r.out)}` }))}
         >
           <div className="mt-1 grid grid-cols-2 gap-x-2 text-2xl font-semibold tracking-tight tabular-nums">
-            <span className="truncate" title={`入站 ${fmtBytes(today?.in ?? 0)}`}>↓ {fmtBytes(today?.in ?? 0)}</span>
-            <span className="truncate" title={`出站 ${fmtBytes(today?.out ?? 0)}`}>↑ {fmtBytes(today?.out ?? 0)}</span>
+            <BigNum arrow="↓" text={fmtBytes(today?.in ?? 0)} title={`入站 ${fmtBytes(today?.in ?? 0)}`} />
+            <BigNum arrow="↑" text={fmtBytes(today?.out ?? 0)} title={`出站 ${fmtBytes(today?.out ?? 0)}`} />
           </div>
           <Foot>
             总流量 <span className="tabular-nums">↓<SmoothValue value={fmtBytes(totalIn)} min="min-w-[8ch]" /> ↑<SmoothValue value={fmtBytes(totalOut)} min="min-w-[8ch]" /></span>
@@ -195,8 +195,8 @@ export function StatCards({ servers }: { servers: ServerView[] }) {
             }))}
         >
           <div className="mt-1 grid grid-cols-2 gap-x-2 text-2xl font-semibold tracking-tight tabular-nums">
-            <span className="truncate">↓ <SmoothValue value={fmtSpeed(speedIn)} /></span>
-            <span className="truncate">↑ <SmoothValue value={fmtSpeed(speedOut)} /></span>
+            <BigNum arrow="↓" text={fmtSpeed(speedIn)} />
+            <BigNum arrow="↑" text={fmtSpeed(speedOut)} />
           </div>
           <Foot>
             <Sparkline series={speedHistory} />
@@ -336,6 +336,21 @@ function Big({ children }: { children: React.ReactNode }) {
 /** 底行小字（mt-auto：撑满卡高后贴底） */
 function Foot({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn('mt-auto truncate pt-1 text-xs text-muted-foreground', className)}>{children}</div>
+}
+
+/** 大读数 + 单位降档：数字保持 2xl，单位缩到 xs 弱化——单位宽度省下一半，
+ *  宽值（如 118.3 MB/s）在半卡列宽内也放得下，不再被 truncate 截成省略号
+ *  （与卡片读数 min-w 预留同思路，这里列宽固定预留不生效，改收缩单位） */
+function BigNum({ arrow, text, title }: { arrow: string; text: string; title?: string }) {
+  const sp = text.indexOf(' ')
+  const num = sp < 0 ? text : text.slice(0, sp)
+  const unit = sp < 0 ? '' : text.slice(sp + 1)
+  return (
+    <span className="truncate" title={title}>
+      {arrow} {num}
+      {unit && <span className="text-xs font-normal text-muted-foreground"> {unit}</span>}
+    </span>
+  )
 }
 
 /** 网速走势线：下行前景色 / 上行弱化灰，无坐标轴，只说形状（jikasei 同款） */
