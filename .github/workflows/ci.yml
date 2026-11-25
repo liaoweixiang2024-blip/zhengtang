@@ -104,6 +104,8 @@ jobs:
             mkdir -p "/tmp/pkg/$name"
             cp "target/${{ matrix.target }}/release/$bin" "/tmp/pkg/$name/"
             cp scripts/install.sh /tmp/pkg/ 2>/dev/null || true
+            # agent 包内带 zt-agent 命令：zt-agent upgrade 时自刷新命令本身（闭环）
+            [ "$bin" = "zhengtang-agent" ] && cp scripts/zt-agent.sh "/tmp/pkg/$name/zt-agent" 2>/dev/null || true
             tar -czf "dist/$name.tar.gz" -C /tmp/pkg "$name"
             (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
           done

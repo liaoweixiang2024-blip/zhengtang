@@ -40,21 +40,48 @@ esac
 
 # ---------- 下载 ----------
 VERSION="${ZT_VERSION:-latest}"
-BASE="${ZT_BASE_URL:-https://github.com/liaoweixiang2024-blip/zhengtang/releases}"
+OFFICIAL="https://github.com/liaoweixiang2024-blip/zhengtang/releases"
+MIRRORS="${ZT_MIRROR:-https://ghfast.top/$OFFICIAL https://gh-proxy.com/$OFFICIAL}"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
 if [ -n "${ZT_DL_BASE:-}" ]; then
   # 面板自托管（data/agents/）：无需访问 GitHub
   URL="${ZT_DL_BASE%/}/zhengtang-agent-$TARGET.tar.gz"
-elif [ "$VERSION" = "latest" ]; then
-  URL="$BASE/latest/download/zhengtang-agent-$TARGET.tar.gz"
+  echo "下载 $URL"
+  curl -kfsSL "$URL" -o "$TMP/agent.tar.gz"
 else
-  URL="$BASE/download/$VERSION/zhengtang-agent-$TARGET.tar.gz"
+  # 源顺序：显式 ZT_BASE_URL 只用之；否则官方 4s 探测——可达用「官方+镜像兜底」，
+  # 不可达（国内常态）直接镜像。latest 在镜像 CDN 可能回旧缓存，显式 ZT_VERSION 可绕过。
+  if [ -n "${ZT_BASE_URL:-}" ]; then
+    BASES="$ZT_BASE_URL"
+  elif curl -m 4 -fsI -o /dev/null "$OFFICIAL" 2>/dev/null; then
+    BASES="$OFFICIAL $MIRRORS"
+  else
+    BASES="$MIRRORS"
+    echo "官方 GitHub 不可达，自动走镜像"
+  fi
+  DOWNLOADED=""
+  for B in $BASES; do
+    if [ "$VERSION" = "latest" ]; then URL="$B/latest/download/zhengtang-agent-$TARGET.tar.gz"
+    else URL="$B/download/$VERSION/zhengtang-agent-$TARGET.tar.gz"; fi
+    echo "尝试源: $B"
+    if ! curl -fsSL --connect-timeout 6 -m 300 "$URL" -o "$TMP/agent.tar.gz"; then
+      # 23=写盘失败：换源也无济于事，直接给出可操作提示
+      if [ "$?" = "23" ]; then echo "本地写盘失败（磁盘满？检查 /tmp 所在分区空间）"; exit 1; fi
+      continue
+    fi
+    # sha256 同源校验（校验文件拉不到则跳过，不阻断安装）
+    if curl -fsSL --connect-timeout 6 -m 60 "$URL.sha256" -o "$TMP/agent.sha256" 2>/dev/null && [ -s "$TMP/agent.sha256" ]; then
+      EXPECT=$(awk '{print $1}' "$TMP/agent.sha256")
+      if [ -n "$EXPECT" ] && [ "$(sha256sum "$TMP/agent.tar.gz" | awk '{print $1}')" != "$EXPECT" ]; then
+        echo "sha256 校验失败，换下一源"; continue
+      fi
+    fi
+    DOWNLOADED=1; break
+  done
+  [ -n "$DOWNLOADED" ] || { echo "所有源均下载失败（官方与镜像都不可达？）"; exit 1; }
 fi
-echo "下载 $URL"
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-CURL_FLAGS="-fsSL"
-case "$URL" in https://*) [ -n "${ZT_DL_BASE:-}" ] && CURL_FLAGS="-kfsSL" ;; esac
-curl $CURL_FLAGS "$URL" -o "$TMP/agent.tar.gz"
 tar -xzf "$TMP/agent.tar.gz" -C "$TMP"
 
 # ---------- 安装 ----------
@@ -118,7 +145,6 @@ cat > /usr/local/bin/zt-agent <<'ZTEOF'
 #!/usr/bin/env bash
 # zhengtang-agent 快捷管理
 set -euo pipefail
-BASE_URL="${ZT_BASE_URL:-https://github.com/liaoweixiang2024-blip/zhengtang/releases}"
 CMD="${1:-}"
 
 # 特权命令（动 systemd / 写 /usr/local/bin）非 root 自动 sudo 重跑。
@@ -129,7 +155,9 @@ case "$CMD" in
     if [ "$(id -u)" != 0 ]; then
       if command -v sudo >/dev/null 2>&1; then
         if [ -n "${ZT_BASE_URL:-}" ]; then
-          exec sudo ZT_BASE_URL="$ZT_BASE_URL" "$0" "$@"
+          exec sudo ZT_BASE_URL="$ZT_BASE_URL" ${ZT_MIRROR:+ZT_MIRROR="$ZT_MIRROR"} "$0" "$@"
+        elif [ -n "${ZT_MIRROR:-}" ]; then
+          exec sudo ZT_MIRROR="$ZT_MIRROR" "$0" "$@"
         else
           exec sudo "$0" "$@"
         fi
@@ -150,8 +178,8 @@ case "$CMD" in
   start)   systemctl start zhengtang-agent && echo "✓ 已启动" ;;
   upgrade)
     VER="${2:-latest}"
-    # latest 在镜像 CDN（如 ghfast）可能回旧缓存；显式版本号 zt-agent upgrade v0.2.1 可绕过
-    if [ "$VER" = "latest" ]; then DL="$BASE_URL/latest/download"; else DL="$BASE_URL/download/$VER"; fi
+    OFFICIAL="https://github.com/liaoweixiang2024-blip/zhengtang/releases"
+    MIRRORS="${ZT_MIRROR:-https://ghfast.top/$OFFICIAL https://gh-proxy.com/$OFFICIAL}"
     ARCH=$(uname -m)
     case "$ARCH" in
       x86_64)       TARGET="x86_64-unknown-linux-musl" ;;
@@ -160,13 +188,51 @@ case "$CMD" in
       *) echo "不支持的架构: $ARCH"; exit 1 ;;
     esac
     TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-    echo "下载 $DL/zhengtang-agent-$TARGET.tar.gz"
-    curl -fsSL "$DL/zhengtang-agent-$TARGET.tar.gz" -o "$TMP/a.tgz"
+    # 源顺序：显式 ZT_BASE_URL 只用之；否则官方 4s 探测——可达用「官方+镜像兜底」，
+    # 不可达（国内常态）直接镜像。latest 在镜像 CDN 可能回旧缓存，显式版本号可绕过。
+    if [ -n "${ZT_BASE_URL:-}" ]; then
+      BASES="$ZT_BASE_URL"
+    elif curl -m 4 -fsI -o /dev/null "$OFFICIAL" 2>/dev/null; then
+      BASES="$OFFICIAL $MIRRORS"
+    else
+      BASES="$MIRRORS"
+      echo "官方 GitHub 不可达，自动走镜像"
+    fi
+    PKG="zhengtang-agent-$TARGET.tar.gz"
+    OK=""
+    for B in $BASES; do
+      DL="$B/latest/download"; [ "$VER" != "latest" ] && DL="$B/download/$VER"
+      echo "尝试源: $B"
+      if ! curl -fsSL --connect-timeout 6 -m 300 "$DL/$PKG" -o "$TMP/a.tgz"; then
+        # 23=写盘失败：换源也无济于事，直接给出可操作提示
+        if [ "$?" = "23" ]; then echo "本地写盘失败（磁盘满？检查 /tmp 所在分区空间）"; exit 1; fi
+        continue
+      fi
+      # sha256 同源校验（校验文件拉不到则跳过校验，不因此阻断）
+      if curl -fsSL --connect-timeout 6 -m 60 "$DL/$PKG.sha256" -o "$TMP/a.sha256" 2>/dev/null && [ -s "$TMP/a.sha256" ]; then
+        EXPECT=$(awk '{print $1}' "$TMP/a.sha256")
+        if [ -n "$EXPECT" ] && [ "$(sha256sum "$TMP/a.tgz" | awk '{print $1}')" != "$EXPECT" ]; then
+          echo "sha256 校验失败，换下一源"; continue
+        fi
+      fi
+      OK="$B"; break
+    done
+    [ -n "$OK" ] || { echo "所有源均下载失败（官方与镜像都不可达？）"; exit 1; }
     tar -xzf "$TMP/a.tgz" -C "$TMP"
     UPGRADE_BIN=$(find "$TMP" -type f -name zhengtang-agent | head -1)
     [ -n "$UPGRADE_BIN" ] || { echo "包内未找到 zhengtang-agent"; exit 1; }
     install -m 0755 "$UPGRADE_BIN" /usr/local/bin/zhengtang-agent
     systemctl restart zhengtang-agent
+    # 顺手自刷新 zt-agent 命令本身（v0.3.8+ 的包内已带；mv 换 inode，
+    # 不影响正在运行的脚本收尾）
+    ZT_CMD=$(find "$TMP" -type f -name zt-agent | head -1)
+    if [ -n "$ZT_CMD" ]; then
+      if cp "$ZT_CMD" /usr/local/bin/zt-agent.new && chmod 755 /usr/local/bin/zt-agent.new && mv /usr/local/bin/zt-agent.new /usr/local/bin/zt-agent; then
+        echo "✓ zt-agent 命令已同步更新"
+      else
+        echo "（zt-agent 命令未刷新，不影响本次升级）"
+      fi
+    fi
     echo "✓ 已升级到 ${VER} 并重启"
     ;;
   uninstall)

@@ -25,6 +25,16 @@ pub static UPDATING: AtomicBool = AtomicBool::new(false);
 
 pub const DEFAULT_BASE: &str = "https://github.com/liaoweixiang2024-blip/zhengtang/releases";
 
+/// 官方直连失败时依次重试的镜像前缀（国内 NAS 直连 GitHub 常超时/极慢），
+/// 拼接形式 {镜像前缀}/{官方完整 releases 地址}。
+/// sha256 校验文件与包同源拉取——镜像属第三方，理论上可同时篡改两者；
+/// 仅在官方源失败后才触达镜像，自托管面板接受该取舍。
+const MIRROR_PREFIXES: &[&str] = &["https://ghfast.top/", "https://gh-proxy.com/"];
+/// 官方源短超时：快速判死切镜像，避免前端更新请求长时间挂着无响应。
+const OFFICIAL_TIMEOUT_SECS: u64 = 45;
+/// 镜像源超时（2MB 级安装包，90s 已远超正常带宽所需）。
+const MIRROR_TIMEOUT_SECS: u64 = 90;
+
 /// 本机构建 target triple（与 CI release 产物命名一致；非 release 目标不支持）
 pub fn build_target() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH, cfg!(target_env = "musl")) {
@@ -44,13 +54,6 @@ pub fn update_base(state: &AppState) -> String {
     } else {
         b.trim_end_matches('/').to_string()
     }
-}
-
-fn client(secs: u64) -> Option<reqwest::Client> {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(secs))
-        .build()
-        .ok()
 }
 
 /// 探测最新版本：请求 latest/download（禁跟随），从 302 Location 解析 vTag。
@@ -110,30 +113,86 @@ mod tests {
             assert!(build_target().is_none(), "非发布目标应返回 None 而非匹配到错误三元组");
         }
     }
+
+    #[test]
+    fn mirror_url_shape() {
+        // 镜像 base = 前缀 + 官方完整地址；拼 /download/vX/ 后必须是
+        // gh-proxy 类镜像可代理的完整 GitHub URL
+        for prefix in MIRROR_PREFIXES {
+            let base = format!("{prefix}{}", DEFAULT_BASE.trim_end_matches('/'));
+            assert!(base.starts_with("https://"));
+            let url = format!("{base}/download/v0.3.7/zhengtang-server-x.tar.gz");
+            assert!(
+                url.contains("https://github.com/liaoweixiang2024-blip/zhengtang/releases/download/"),
+                "镜像 URL 应内嵌官方完整地址：{url}"
+            );
+        }
+    }
 }
 
 /// 下载 + sha256 校验 + 解包，返回暂存的二进制路径（data_dir/update/…）。
 /// 不做替换——把替换与 exec 留给调用方在响应写出之后执行。
+///
+/// 源选择：settings.update_base 显式配置时只用该源（用户选择，不自动兜底）；
+/// 未配置时官方源短超时快速判死，失败自动依次切镜像——避免国内直连
+/// GitHub 把更新请求挂满整个超时窗口、前端长时间"卡住"。
 pub async fn download(state: &AppState, version: &str) -> Result<PathBuf, String> {
     let target = build_target().ok_or_else(|| "当前平台不支持在线更新（请用安装脚本升级）".to_string())?;
     if !valid_version(version) {
         return Err("版本号格式应为 vX.Y.Z（如 v0.2.3）".into());
     }
-    let base = update_base(state);
-    // 兜底拦截历史设置里已存的 http:// 源：sha256 与二进制同源下载，
-    // 明文源上中间人可同时替换两者使校验失效（设置侧已禁录新值）
-    if base.starts_with("http://") {
-        return Err("更新源必须使用 https://（站点设置里把源改为 https 前缀后重试）".into());
-    }
     let file = format!("zhengtang-server-{target}.tar.gz");
-    let url = format!("{base}/download/{version}/{file}");
 
-    let client = client(120).ok_or("构建 HTTP 客户端失败")?;
+    let explicit = state.settings().update_base;
+    if !explicit.is_empty() {
+        let base = explicit.trim_end_matches('/').to_string();
+        // 兜底拦截历史设置里已存的 http:// 源：sha256 与二进制同源下载，
+        // 明文源上中间人可同时替换两者使校验失效（设置侧已禁录新值）
+        if base.starts_with("http://") {
+            return Err("更新源必须使用 https://（站点设置里把源改为 https 前缀后重试）".into());
+        }
+        return fetch_package(&base, version, &file, MIRROR_TIMEOUT_SECS, &state.data_dir).await;
+    }
+
+    let mut last_err = String::new();
+    match fetch_package(DEFAULT_BASE, version, &file, OFFICIAL_TIMEOUT_SECS, &state.data_dir).await {
+        Ok(p) => return Ok(p),
+        Err(e) => {
+            tracing::warn!("官方源下载失败，自动切换镜像重试：{e}");
+            last_err = format!("官方：{e}");
+        }
+    }
+    for prefix in MIRROR_PREFIXES {
+        let base = format!("{prefix}{}", DEFAULT_BASE.trim_end_matches('/'));
+        match fetch_package(&base, version, &file, MIRROR_TIMEOUT_SECS, &state.data_dir).await {
+            Ok(p) => return Ok(p),
+            Err(e) => {
+                tracing::warn!("镜像 {base} 下载失败：{e}");
+                last_err = format!("{last_err}；镜像 {base}：{e}");
+            }
+        }
+    }
+    Err(format!("所有源均下载失败。{last_err}"))
+}
+
+/// 从单个源下载安装包 + sha256 同源校验 + 解包暂存（返回暂存二进制路径）。
+async fn fetch_package(
+    base: &str,
+    version: &str,
+    file: &str,
+    timeout_secs: u64,
+    data_dir: &Path,
+) -> Result<PathBuf, String> {
+    let url = format!("{base}/download/{version}/{file}");
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|_| "构建 HTTP 客户端失败".to_string())?;
     let resp = client
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("下载失败：{e}（检查更新源是否可达，可在站点设置里填镜像前缀）"))?;
+        .map_err(|e| format!("下载失败：{e}"))?;
     let resp = resp.error_for_status().map_err(|e| format!("下载失败：{e}"))?;
     let bytes = resp.bytes().await.map_err(|e| format!("下载中断：{e}"))?;
 
@@ -172,7 +231,7 @@ pub async fn download(state: &AppState, version: &str) -> Result<PathBuf, String
     }
     let bin = bin.ok_or("包内未找到 zhengtang-server")?;
 
-    let dir = state.data_dir.join("update");
+    let dir = data_dir.join("update");
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建暂存目录失败：{e}"))?;
     let out = dir.join(format!("zhengtang-server-{version}"));
     std::fs::write(&out, &bin).map_err(|e| format!("写暂存文件失败：{e}（data 目录磁盘满？）"))?;
