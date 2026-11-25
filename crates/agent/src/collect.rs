@@ -45,10 +45,15 @@ impl Collector {
         self.networks.refresh(true);
         self.gpus.refresh(true);
 
-        // ---- 网络：累计计数 + 差分速率 ----
-        let (in_total, out_total) = self.networks.iter().fold((0u64, 0u64), |(i, o), (_, d)| {
-            (i.saturating_add(d.total_received()), o.saturating_add(d.total_transmitted()))
-        });
+        // ---- 网络：累计计数 + 差分速率（只统计真实流量网卡：
+        // 回环 / docker / 隧道等虚拟接口不计，否则一次下载会被重复累加数倍） ----
+        let (in_total, out_total) = self
+            .networks
+            .iter()
+            .filter(|(name, _)| !is_virtual_iface(name.to_string_lossy().as_ref()))
+            .fold((0u64, 0u64), |(i, o), (_, d)| {
+                (i.saturating_add(d.total_received()), o.saturating_add(d.total_transmitted()))
+            });
         let (in_speed, out_speed) = match self.last_net {
             Some((pi, po, at)) => {
                 let dt = at.elapsed().as_secs_f64().max(0.1);
@@ -245,5 +250,48 @@ fn detect_virt() -> String {
     #[cfg(not(target_os = "linux"))]
     {
         "unknown".into()
+    }
+}
+
+/// 是否为虚拟/回环网卡：不纳入网速与流量统计。
+/// 一次下载经过 eth0 → docker0/br-* → veth 会被逐层重复计数，
+/// 隧道（wg/tun/zt 等）在物理网卡与隧道接口上同样重复——
+/// 全都累加会让面板网速虚增数倍，故按名字过滤。
+fn is_virtual_iface(name: &str) -> bool {
+    let n = name.to_lowercase();
+    // 回环（Linux lo / macOS lo0）
+    n == "lo" || n == "lo0"
+        // docker / linux bridge / 容器 veth / libvirt
+        || n.starts_with("docker")
+        || n.starts_with("br-")
+        || n.starts_with("bridge")
+        || n.starts_with("veth")
+        || n.starts_with("virbr")
+        // 隧道：wireguard / tap / tun（含 macOS utun） / zero-tier / tailscale
+        || n.starts_with("wg")
+        || n.starts_with("tap")
+        || n.starts_with("tun")
+        || n.starts_with("utun")
+        || n.starts_with("zt")
+        || n.starts_with("tailscale")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_virtual_iface;
+
+    #[test]
+    fn 虚拟接口被过滤() {
+        for name in ["lo", "lo0", "docker0", "br-1a2b3c", "vethabc123", "virbr0",
+                     "wg0", "tun0", "tap0", "utun3", "zt0", "tailscale0"] {
+            assert!(is_virtual_iface(name), "{name} 应判为虚拟接口");
+        }
+    }
+
+    #[test]
+    fn 真实网卡不被误过滤() {
+        for name in ["eth0", "ens18", "en0", "enp3s0", "wlan0", "bond0", "eth1"] {
+            assert!(!is_virtual_iface(name), "{name} 不应被判为虚拟接口");
+        }
     }
 }
